@@ -1,14 +1,14 @@
 @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap');
 
 :root {
-  --bg-color: #F9F6F0; /* 暖杏白 */
-  --primary-green: #8FB9A8; /* 鼠尾草綠 */
-  --primary-orange: #E6A87C; /* 赤陶橘 */
-  --primary-yellow: #E2C275; /* 芥末黃 */
-  --text-main: #4A4A4A;
-  --text-light: #8A8A8A;
+  --bg-color: #F4F2EB; /* 燕麥白 (更文青) */
+  --primary-green: #6C8274; /* 靜謐灰綠 */
+  --primary-orange: #C86F54; /* 磚紅色 (更顯眼、有質感) */
+  --primary-yellow: #C8A963; /* 復古黃 */
+  --text-main: #4A4D4A;
+  --text-light: #8A8D8A;
   --card-bg: #FFFFFF;
-  --border-color: #EAE4D3;
+  --border-color: #E2DFD8;
 }
 
 body {
@@ -474,22 +474,31 @@ h3 {
 
 /* 登入與註冊介面 */
 .auth-container {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0; /* 強制填滿整個螢幕，無視 root 寬度限制 */
   display: flex;
   align-items: center;
   justify-content: center;
-  height: 100vh;
-  background-color: var(--primary-green);
+  background: linear-gradient(135deg, #E4E0D3 0%, #C9C5B8 100%); /* 文青感雙色漸層 */
   padding: 20px;
   box-sizing: border-box;
+  z-index: 9999;
 }
 .auth-card {
-  background: var(--card-bg);
-  padding: 35px 30px;
-  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.95);
+  padding: 45px 35px;
+  border-radius: 12px;
   width: 100%;
   max-width: 400px;
-  box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+  box-shadow: 0 15px 35px rgba(90, 80, 70, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.8);
   text-align: center;
+}
+.auth-card h1 {
+  color: var(--primary-orange);
+  font-size: 1.8rem;
+  letter-spacing: 2px;
+  margin-bottom: 10px;
 }
 .auth-toggle {
   color: var(--primary-green);

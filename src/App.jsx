@@ -995,7 +995,7 @@ const AuthScreen = () => {
   return (
     <div className="auth-container">
       <div className="auth-card">
-        <h1><BookHeart size={32} /> 波波日記本</h1>
+        <h1><BookHeart size={32} /> 波皇子的健保手冊</h1>
         <h3 style={{marginTop: 0, marginBottom: '20px'}}>登入您的帳號</h3>
         {error && <div className="auth-error">{error}</div>}
         <form onSubmit={handleSubmit} className="input-group">
@@ -1032,7 +1032,7 @@ export default function App() {
     <div className="app-container">
       {/* 手機版 Header */}
       <header className="app-header">
-        <BookHeart size={24} /> 波波的健康日記本
+        <BookHeart size={24} /> 波皇子的健保手冊
         <button className="btn-icon" style={{color: 'white', marginLeft: 'auto'}} onClick={() => api.auth.logout()} title="登出">
           <LogOut size={22} />
         </button>
@@ -1041,7 +1041,7 @@ export default function App() {
       {/* 左側邊欄 (電腦版顯示) */}
       <nav className="bottom-nav">
         <div className="app-header" style={{display: 'none', background: 'transparent', color: 'var(--primary-orange)', marginBottom: '20px'}}>
-           <BookHeart size={28} /> <strong>波波日記本</strong>
+           <BookHeart size={28} /> <strong>波皇子的健保手冊</strong>
         </div>
         <button className={`nav-btn ${activeTab === 0 ? 'active' : ''}`} onClick={() => setActiveTab(0)}>
           <CalendarIcon size={24} /> <span>行事曆</span>
