@@ -149,9 +149,9 @@ const CalendarTab = () => {
     return (
       <div className="card">
         <div className="calendar-title-bar">
-          <div style={{display: 'flex', alignItems: 'center', gap: '15px'}}>
+          <div className="calendar-month-switcher">
             <button className="btn-icon" onClick={handlePrevMonth}><ChevronLeft size={24} /></button>
-            <h3 style={{margin: 0, cursor: 'pointer', minWidth: '120px', textAlign: 'center'}} onClick={handleToday} title="回到今天">{currentYear} 年 {currentMonth + 1} 月</h3>
+            <h3 onClick={handleToday} title="回到今天">{currentYear} 年 {currentMonth + 1} 月</h3>
             <button className="btn-icon" onClick={handleNextMonth}><ChevronRight size={24} /></button>
           </div>
           <button className="btn-primary" style={{width: 'auto', padding: '8px 12px'}} onClick={() => openNewForm()}>

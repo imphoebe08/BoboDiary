@@ -243,16 +243,23 @@ h3 {
 
 /* 日曆樣式 */
 .calendar-title-bar {
-  position: relative;
   display: flex;
-  justify-content: center;
+  justify-content: space-between;
   align-items: center;
   margin-bottom: 15px;
 }
 
-.calendar-title-bar > .btn-primary {
-  position: absolute;
-  right: 0;
+.calendar-month-switcher {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+}
+
+.calendar-month-switcher h3 {
+  margin: 0;
+  cursor: pointer;
+  min-width: 120px;
+  text-align: center;
 }
 
 .calendar-grid {
@@ -269,8 +276,8 @@ h3 {
 }
 
 .calendar-cell {
-  aspect-ratio: 1 / 1;
   min-height: 85px;
+  min-width: 0; /* 確保內容不會撐破網格寬度 */
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -316,6 +323,7 @@ h3 {
 }
 
 .event-pill {
+  box-sizing: border-box; /* 確保 padding 不會讓標籤過寬 */
   font-size: 0.75rem;
   padding: 2px 4px;
   border-radius: 4px;
@@ -497,4 +505,35 @@ h3 {
   background: #fdf2f2;
   padding: 8px;
   border-radius: 6px;
+}
+
+/* 手機版行事曆優化 */
+@media (max-width: 768px) {
+  .calendar-title-bar {
+    margin-bottom: 10px;
+  }
+  .calendar-month-switcher {
+    gap: 5px;
+  }
+  .calendar-month-switcher h3 {
+    min-width: 90px;
+    font-size: 1.1rem;
+  }
+  .calendar-grid {
+    gap: 2px;
+  }
+  .calendar-cell {
+    min-height: 65px; /* 取消強制正方形後，讓手機版格子長一點點更好點擊 */
+    padding: 2px;
+  }
+  .calendar-cell.today > span {
+    width: 22px;
+    height: 22px;
+    line-height: 22px;
+  }
+  .event-pill {
+    font-size: 0.65rem;
+    padding: 1px 2px;
+    width: 95%;
+  }
 }
