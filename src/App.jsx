@@ -1,0 +1,791 @@
+import React, { useState, useEffect } from 'react';
+import DatePicker from 'react-datepicker';
+import 'react-datepicker/dist/react-datepicker.css';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { Calendar as CalendarIcon, Utensils, Activity, Syringe, Plus, Trash2, Edit2, Settings, BookHeart, X, LogOut } from 'lucide-react';
+import './bobo-theme.css';
+import { api } from './api';
+
+// 通用彈跳視窗元件
+const Modal = ({ title, onClose, children }) => (
+  <div className="modal-overlay" onClick={onClose}>
+    <div className="modal-content" onClick={e => e.stopPropagation()}>
+      <div className="modal-header">
+        <h2 style={{ margin: 0, fontSize: '1.4rem' }}>{title}</h2>
+        <button className="btn-icon" onClick={onClose}><X size={24} /></button>
+      </div>
+      {children}
+    </div>
+  </div>
+);
+
+// ==============================
+// 1. 行事曆介面 (Calendar Tab)
+// ==============================
+const CalendarTab = () => {
+  const [events, setEvents] = useState([]);
+  const [settings, setSettings] = useState({ categories: [] });
+  const [showFormModal, setShowFormModal] = useState(false);
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [form, setForm] = useState({ date: '', title: '', type: '就醫' });
+  const [editingId, setEditingId] = useState(null);
+  const [viewMode, setViewMode] = useState('month'); // 'month' or 'all'
+  const [newCat, setNewCat] = useState('');
+
+  const currentDate = new Date();
+  const currentYear = currentDate.getFullYear();
+  const currentMonth = currentDate.getMonth(); // 0-11
+
+  useEffect(() => { 
+    api.getEvents().then(setEvents); 
+    api.getCalendarSettings().then(res => {
+      setSettings(res);
+      setForm(prev => ({...prev, type: res.categories[0] || '就醫'}));
+    });
+  }, []);
+
+  const handleSave = async () => {
+    if (!form.date || !form.title) return;
+    if (editingId) {
+      await api.updateEvent(editingId, form);
+    } else {
+      await api.addEvent(form);
+    }
+    setEvents(await api.getEvents());
+    setForm({ date: '', title: '', type: settings.categories[0] || '就醫' });
+    setEditingId(null);
+    setShowFormModal(false);
+  };
+
+  const handleEdit = (ev) => {
+    setForm({ date: ev.date, title: ev.title, type: ev.type });
+    setEditingId(ev.id);
+    setShowFormModal(true);
+  };
+
+  const handleDelete = async (id) => {
+    await api.deleteEvent(id);
+    setEvents(await api.getEvents());
+  };
+  
+  const handleAddCat = async () => {
+    if(!newCat) return;
+    const updated = { ...settings, categories: [...settings.categories, newCat] };
+    await api.saveCalendarSettings(updated);
+    setSettings(updated);
+    setNewCat('');
+  };
+  
+  const handleDeleteCat = async (idx) => {
+    const updatedCats = [...settings.categories];
+    updatedCats.splice(idx, 1);
+    const updated = { ...settings, categories: updatedCats };
+    await api.saveCalendarSettings(updated);
+    setSettings(updated);
+  };
+  
+  const openNewForm = (dateStr = '') => {
+    setForm({ date: dateStr, title: '', type: settings.categories[0] || '就醫' });
+    setEditingId(null);
+    setShowFormModal(true);
+  };
+
+  const renderCalendar = () => {
+    const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+    const firstDayIndex = new Date(currentYear, currentMonth, 1).getDay();
+    
+    const blanks = Array.from({ length: firstDayIndex }, (_, i) => i);
+    const days = Array.from({ length: daysInMonth }, (_, i) => i + 1);
+    const weekDays = ['日', '一', '二', '三', '四', '五', '六'];
+    const todayStr = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(currentDate.getDate()).padStart(2, '0')}`;
+
+    return (
+      <div className="card">
+        <div className="calendar-title-bar">
+          <h3 style={{margin: 0}}>{currentYear} 年 {currentMonth + 1} 月</h3>
+          <button className="btn-primary" style={{width: 'auto', padding: '8px 12px'}} onClick={() => openNewForm()}>
+            <Plus size={18} /> 新增
+          </button>
+        </div>
+        <div className="calendar-grid">
+          {weekDays.map(wd => <div key={wd} className="calendar-header-cell">{wd}</div>)}
+          {blanks.map(b => <div key={`blank-${b}`} className="calendar-cell empty" />)}
+          {days.map(d => {
+            const dateStr = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+            const dayEvents = events.filter(ev => ev.date === dateStr);
+            const isToday = dateStr === todayStr;
+            return (
+              <div key={d} className={`calendar-cell ${dayEvents.length > 0 ? 'has-event' : ''} ${isToday ? 'today' : ''}`} onClick={() => openNewForm(dateStr)}>
+                <span style={{fontWeight: isToday ? 'bold' : 'normal'}}>{d}</span>
+                <div style={{width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center'}}>
+                  {dayEvents.map(ev => <div key={ev.id} className="event-pill" title={ev.title}>{ev.title}</div>)}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
+  const displayedEvents = events
+    .filter(ev => viewMode === 'all' || ev.date.startsWith(`${currentYear}-${String(currentMonth + 1).padStart(2, '0')}`))
+    .sort((a,b) => new Date(a.date) - new Date(b.date));
+
+  return (
+    <div>
+      <h2><CalendarIcon /> 行事曆</h2>
+      {renderCalendar()}
+
+      <div className="btn-group">
+        <button className={`btn-secondary ${viewMode === 'month' ? 'active' : ''}`} onClick={() => setViewMode('month')}>本月行程</button>
+        <button className={`btn-secondary ${viewMode === 'all' ? 'active' : ''}`} onClick={() => setViewMode('all')}>全部行程</button>
+      </div>
+
+      {displayedEvents.map(ev => (
+        <div className="card flex-between" key={ev.id}>
+          <div>
+            <span className="tag">{ev.type}</span>
+            <strong>{ev.date}</strong> - {ev.title}
+          </div>
+          <div>
+            <button className="btn-icon" onClick={() => handleEdit(ev)}><Edit2 size={18} /></button>
+            <button className="btn-icon" onClick={() => handleDelete(ev.id)}><Trash2 size={18} /></button>
+          </div>
+        </div>
+      ))}
+
+      {showFormModal && (
+        <Modal title={editingId ? '編輯排程' : '新增排程'} onClose={() => setShowFormModal(false)}>
+          <div className="input-group">
+            <label>日期</label>
+            <DatePicker
+              selected={form.date ? new Date(form.date + 'T00:00:00') : null}
+              onChange={date => {
+                if (date) {
+                  const yyyy = date.getFullYear();
+                  const mm = String(date.getMonth() + 1).padStart(2, '0');
+                  const dd = String(date.getDate()).padStart(2, '0');
+                  setForm({...form, date: `${yyyy}-${mm}-${dd}`});
+                } else {
+                  setForm({...form, date: ''});
+                }
+              }}
+              dateFormat="yyyy-MM-dd"
+              placeholderText="請選擇日期"
+            />
+          </div>
+          <div className="input-group">
+            <label style={{display: 'flex', justifyContent: 'space-between'}}>
+              項目類別 
+              <button className="btn-icon" onClick={() => setShowSettingsModal(true)} style={{padding: 0}}><Settings size={16}/></button>
+            </label>
+            <select value={form.type} onChange={e => setForm({...form, type: e.target.value})}>
+              {settings.categories.length === 0 && <option value="">請先新增類別</option>}
+              {settings.categories.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </div>
+          <div className="input-group">
+            <label>詳細事項</label>
+            <input type="text" placeholder="例如：打狂犬病疫苗" value={form.title} onChange={e => setForm({...form, title: e.target.value})} />
+          </div>
+          <button className="btn-primary" onClick={handleSave} style={{marginTop: '20px'}}>
+            <Plus size={20} /> {editingId ? '儲存修改' : '新增排程'}
+          </button>
+        </Modal>
+      )}
+
+      {showSettingsModal && (
+        <Modal title="管理行事曆類別" onClose={() => setShowSettingsModal(false)}>
+          <div className="input-group" style={{flexDirection: 'row'}}>
+            <input type="text" style={{flex: 1}} placeholder="輸入新類別" value={newCat} onChange={(e) => setNewCat(e.target.value)} />
+            <button className="btn-primary" style={{width: 'auto', padding: '10px'}} onClick={handleAddCat}><Plus size={20}/></button>
+          </div>
+          {settings.categories.map((c, i) => (
+            <div key={i} className="setting-item">
+              <span>{c}</span>
+              <button className="btn-icon" onClick={() => handleDeleteCat(i)}><Trash2 size={16}/></button>
+            </div>
+          ))}
+        </Modal>
+      )}
+    </div>
+  );
+};
+
+// ==============================
+// 2. 飲食/用藥紀錄 (Diet & Meds Tab)
+// ==============================
+const DietTab = () => {
+  const [logs, setLogs] = useState([]);
+  const [settings, setSettings] = useState({ categories: [], brands: [] });
+  const [showFormModal, setShowFormModal] = useState(false);
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [form, setForm] = useState({ category: '飼料', brand: '', duration: '', dosage: '', frequency: '' });
+  const [editingId, setEditingId] = useState(null);
+  const [filter, setFilter] = useState('全部');
+  const [newSetting, setNewSetting] = useState({ type: 'brands', value: '' });
+
+  useEffect(() => { 
+    api.getLogs().then(setLogs); 
+    api.getDietSettings().then(res => {
+      setSettings(res);
+      setForm(prev => ({...prev, category: res.categories[0] || '飼料'}));
+    });
+  }, []);
+
+  const handleSave = async () => {
+    if (!form.brand) return;
+    if (editingId) {
+      await api.updateLog(editingId, form);
+    } else {
+      await api.addLog(form);
+    }
+    setLogs(await api.getLogs());
+    setForm({ category: settings.categories[0] || '飼料', brand: '', duration: '', dosage: '', frequency: '' });
+    setEditingId(null);
+    setShowFormModal(false);
+  };
+
+  const handleEdit = (log) => {
+    setForm({ category: log.category || '飼料', brand: log.brand, duration: log.duration, dosage: log.dosage, frequency: log.frequency });
+    setEditingId(log.id);
+    setShowFormModal(true);
+  };
+
+  const handleDelete = async (id) => {
+    await api.deleteLog(id);
+    setLogs(await api.getLogs());
+  };
+  
+  const handleAddSetting = async () => {
+    if(!newSetting.value) return;
+    const updated = { ...settings, [newSetting.type]: [...settings[newSetting.type], newSetting.value] };
+    await api.saveDietSettings(updated);
+    setSettings(updated);
+    setNewSetting({...newSetting, value: ''});
+  };
+
+  const handleDeleteSetting = async (type, idx) => {
+    const updatedList = [...settings[type]];
+    updatedList.splice(idx, 1);
+    const updated = { ...settings, [type]: updatedList };
+    await api.saveDietSettings(updated);
+    setSettings(updated);
+  };
+  
+  const openNewForm = () => {
+    setForm({ category: settings.categories[0] || '飼料', brand: '', duration: '', dosage: '', frequency: '' });
+    setEditingId(null);
+    setShowFormModal(true);
+  };
+
+  const displayedLogs = filter === '全部' ? logs : logs.filter(l => l.category === filter);
+
+  return (
+    <div>
+      <div className="flex-between">
+        <h2><Utensils /> 飼料與用藥紀錄</h2>
+        <div>
+          <button className="btn-icon" onClick={() => setShowSettingsModal(true)}><Settings size={24} /></button>
+          <button className="btn-primary" style={{width: 'auto', padding: '8px 12px', display: 'inline-flex', marginLeft: '10px'}} onClick={openNewForm}>
+            <Plus size={18} /> 新增
+          </button>
+        </div>
+      </div>
+
+      <div className="btn-group" style={{overflowX: 'auto'}}>
+        {['全部', ...settings.categories].map(cat => (
+          <button key={cat} className={`btn-secondary ${filter === cat ? 'active' : ''}`} onClick={() => setFilter(cat)}>{cat}</button>
+        ))}
+      </div>
+
+      {displayedLogs.map(log => (
+        <div className="card" key={log.id}>
+          <div className="flex-between">
+            <h4 style={{margin: '0 0 10px 0', color: 'var(--primary-orange)'}}>
+              <span className="tag">{log.category || '飼料'}</span>{log.brand}
+            </h4>
+            <div>
+              <button className="btn-icon" onClick={() => handleEdit(log)}><Edit2 size={18}/></button>
+              <button className="btn-icon" onClick={() => handleDelete(log.id)}><Trash2 size={18}/></button>
+            </div>
+          </div>
+          <p style={{margin: '5px 0', color: 'var(--text-light)'}}>期間：{log.duration}</p>
+          <p style={{margin: '5px 0', color: 'var(--text-light)'}}>用量：{log.dosage}</p>
+          <p style={{margin: '5px 0', color: 'var(--text-light)'}}>頻率：{log.frequency}</p>
+        </div>
+      ))}
+
+      {showFormModal && (
+        <Modal title={editingId ? '編輯紀錄' : '新增紀錄'} onClose={() => setShowFormModal(false)}>
+          <div className="input-group">
+            <label>類別</label>
+            <select value={form.category} onChange={e => setForm({...form, category: e.target.value})}>
+              {settings.categories.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </div>
+          <div className="input-group">
+            <label>哪一款 (品牌/名稱)</label>
+            <input type="text" list="diet-brands" value={form.brand} onChange={e => setForm({...form, brand: e.target.value})} placeholder="選擇或輸入品牌" />
+            <datalist id="diet-brands">
+              {settings.brands.map(b => <option key={b} value={b} />)}
+            </datalist>
+          </div>
+          <div className="input-group">
+            <label>吃多久 (期間)</label>
+            <input type="text" placeholder="例：2023/10 - 至今" value={form.duration} onChange={e => setForm({...form, duration: e.target.value})} />
+          </div>
+          <div className="input-group">
+            <label>用量多少</label>
+            <input type="text" placeholder="例：每天 50g" value={form.dosage} onChange={e => setForm({...form, dosage: e.target.value})} />
+          </div>
+          <div className="input-group">
+            <label>頻率</label>
+            <input type="text" placeholder="例：早晚各一次" value={form.frequency} onChange={e => setForm({...form, frequency: e.target.value})} />
+          </div>
+          <button className="btn-primary" onClick={handleSave} style={{marginTop: '20px'}}>
+            <Plus size={20}/> {editingId ? '儲存修改' : '新增紀錄'}
+          </button>
+        </Modal>
+      )}
+
+      {showSettingsModal && (
+        <Modal title="管理預設類別與品牌" onClose={() => setShowSettingsModal(false)}>
+          <div className="input-group" style={{flexDirection: 'row'}}>
+            <select style={{flex: 1}} value={newSetting.type} onChange={(e) => setNewSetting({...newSetting, type: e.target.value})}>
+              <option value="categories">自訂類別</option>
+              <option value="brands">預設品牌</option>
+            </select>
+            <input type="text" style={{flex: 2}} placeholder="輸入名稱" value={newSetting.value} onChange={(e) => setNewSetting({...newSetting, value: e.target.value})} />
+            <button className="btn-primary" style={{width: 'auto', padding: '10px'}} onClick={handleAddSetting}><Plus size={20}/></button>
+          </div>
+          
+          <h4 style={{marginBottom: '5px'}}>類別清單：</h4>
+          {settings.categories.map((c, i) => (
+            <div key={i} className="setting-item">
+              <span>{c}</span>
+              <button className="btn-icon" onClick={() => handleDeleteSetting('categories', i)}><Trash2 size={16}/></button>
+            </div>
+          ))}
+          <h4 style={{marginBottom: '5px', marginTop: '15px'}}>品牌清單：</h4>
+          {settings.brands.map((b, i) => (
+            <div key={i} className="setting-item">
+              <span>{b}</span>
+              <button className="btn-icon" onClick={() => handleDeleteSetting('brands', i)}><Trash2 size={16}/></button>
+            </div>
+          ))}
+        </Modal>
+      )}
+    </div>
+  );
+};
+
+// ==============================
+// 3. 體重紀錄 (Weight Tab)
+// ==============================
+const WeightTab = () => {
+  const [weights, setWeights] = useState([]);
+  const [showFormModal, setShowFormModal] = useState(false);
+  const [form, setForm] = useState({ date: '', weight: '' });
+
+  useEffect(() => { api.getWeights().then(setWeights); }, []);
+
+  const handleAdd = async () => {
+    if (!form.date || !form.weight) return;
+    await api.addWeight({ date: form.date, weight: parseFloat(form.weight) });
+    setWeights(await api.getWeights());
+    setForm({ date: '', weight: '' });
+    setShowFormModal(false);
+  };
+
+  const handleDelete = async (id) => {
+    await api.deleteWeight(id);
+    setWeights(await api.getWeights());
+  };
+
+  const sortedWeights = [...weights].sort((a,b) => new Date(a.date) - new Date(b.date));
+
+  return (
+    <div>
+      <div className="flex-between">
+        <h2><Activity /> 體重走勢</h2>
+        <button className="btn-primary" style={{width: 'auto', padding: '8px 12px'}} onClick={() => setShowFormModal(true)}>
+          <Plus size={18} /> 新增
+        </button>
+      </div>
+      
+      {sortedWeights.length > 0 && (
+        <div className="card" style={{ height: 300, padding: '20px 0' }}>
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={sortedWeights} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#EAE4D3" />
+              <XAxis dataKey="date" tick={{fill: '#8A8A8A'}} axisLine={false} tickLine={false} />
+              <YAxis domain={['dataMin - 0.5', 'dataMax + 0.5']} tick={{fill: '#8A8A8A'}} axisLine={false} tickLine={false} />
+              <Tooltip />
+              <Line type="monotone" dataKey="weight" stroke="var(--primary-orange)" strokeWidth={3} dot={{r: 5, fill: 'var(--primary-green)'}} activeDot={{ r: 8 }} />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+
+      <h3>體重列表</h3>
+      {sortedWeights.map(w => (
+        <div className="card flex-between" key={w.id} style={{padding: '12px 20px'}}>
+          <span>{w.date}</span>
+          <div style={{display: 'flex', alignItems: 'center', gap: '15px'}}>
+            <strong>{w.weight} kg</strong>
+            <button className="btn-icon" onClick={() => handleDelete(w.id)}><Trash2 size={16}/></button>
+          </div>
+        </div>
+      ))}
+      
+      {showFormModal && (
+        <Modal title="新增體重紀錄" onClose={() => setShowFormModal(false)}>
+          <div className="input-group">
+            <label>測量日期</label>
+            <DatePicker
+              selected={form.date ? new Date(form.date + 'T00:00:00') : null}
+              onChange={date => {
+                if (date) {
+                  const yyyy = date.getFullYear();
+                  const mm = String(date.getMonth() + 1).padStart(2, '0');
+                  const dd = String(date.getDate()).padStart(2, '0');
+                  setForm({...form, date: `${yyyy}-${mm}-${dd}`});
+                } else {
+                  setForm({...form, date: ''});
+                }
+              }}
+              dateFormat="yyyy-MM-dd"
+              placeholderText="請選擇日期"
+            />
+          </div>
+          <div className="input-group">
+            <label>體重 (kg)</label>
+            <input type="number" step="0.1" value={form.weight} onChange={e => setForm({...form, weight: e.target.value})} />
+          </div>
+          <button className="btn-primary" style={{marginTop: '20px'}} onClick={handleAdd}><Plus size={20}/> 儲存</button>
+        </Modal>
+      )}
+    </div>
+  );
+};
+
+// ==============================
+// 4. 血檢報告 (Blood Test Tab)
+// ==============================
+const BloodTestTab = () => {
+  const [tests, setTests] = useState([]);
+  const [settings, setSettings] = useState({ clinics: [], metrics: [] });
+  const [showSettings, setShowSettings] = useState(false);
+  const [showFormModal, setShowFormModal] = useState(false);
+  
+  // Form state for adding/editing tests
+  const [form, setForm] = useState({ date: '', clinic: '' }); 
+  const [selectedMetrics, setSelectedMetrics] = useState([]);
+
+  // Form state for Settings
+  const [newSettingItem, setNewSettingItem] = useState({ type: 'metrics', value: '' });
+
+  const lineColors = ['#E6A87C', '#8FB9A8', '#E2C275', '#A593E0', '#56A8CB'];
+
+  useEffect(() => { 
+    api.getBloodTests().then(setTests);
+    api.getBloodTestSettings().then(res => {
+      setSettings(res);
+      setSelectedMetrics(res.metrics.slice(0, 2)); // Default check first 2
+      if(res.clinics.length > 0) setForm(prev => ({...prev, clinic: res.clinics[0]}));
+    });
+  }, []);
+
+  const handleAdd = async () => {
+    if (!form.date) return;
+    
+    // Prepare data: convert metric string values to floats
+    const testData = { date: form.date, clinic: form.clinic };
+    settings.metrics.forEach(m => {
+      if (form[m] !== undefined && form[m] !== '') {
+        testData[m] = parseFloat(form[m]);
+      }
+    });
+
+    await api.addBloodTest(testData);
+    setTests(await api.getBloodTests());
+    
+    // Reset form keeping the clinic
+    const resetForm = { date: '', clinic: form.clinic };
+    setForm(resetForm);
+    setShowFormModal(false);
+  };
+
+  const handleDelete = async (id) => {
+    await api.deleteBloodTest(id);
+    setTests(await api.getBloodTests());
+  };
+
+  const toggleMetric = (metric) => {
+    if (selectedMetrics.includes(metric)) {
+      setSelectedMetrics(selectedMetrics.filter(m => m !== metric));
+    } else {
+      setSelectedMetrics([...selectedMetrics, metric]);
+    }
+  };
+
+  // Settings Management
+  const addSetting = async () => {
+    if(!newSettingItem.value) return;
+    const updated = { ...settings, [newSettingItem.type]: [...settings[newSettingItem.type], newSettingItem.value] };
+    await api.saveBloodTestSettings(updated);
+    setSettings(updated);
+    setNewSettingItem({...newSettingItem, value: ''});
+  };
+
+  const deleteSetting = async (type, index) => {
+    const updatedList = [...settings[type]];
+    updatedList.splice(index, 1);
+    const updated = { ...settings, [type]: updatedList };
+    await api.saveBloodTestSettings(updated);
+    setSettings(updated);
+  };
+
+  const sortedTests = [...tests].sort((a,b) => new Date(a.date) - new Date(b.date));
+
+  return (
+    <div>
+      <div className="flex-between">
+        <h2><Syringe /> 血液檢查</h2>
+        <div>
+          <button className="btn-icon" onClick={() => setShowSettings(true)}><Settings size={24} /></button>
+          <button className="btn-primary" style={{width: 'auto', padding: '8px 12px', display: 'inline-flex', marginLeft: '10px'}} onClick={() => setShowFormModal(true)}>
+            <Plus size={18} /> 新增
+          </button>
+        </div>
+      </div>
+
+      {showSettings && (
+        <Modal title="管理醫院與追蹤指標" onClose={() => setShowSettings(false)}>
+          <div className="input-group" style={{flexDirection: 'row'}}>
+            <select style={{flex: 1}} value={newSettingItem.type} onChange={(e) => setNewSettingItem({...newSettingItem, type: e.target.value})}>
+              <option value="metrics">追蹤指標</option>
+              <option value="clinics">動物醫院</option>
+            </select>
+            <input type="text" style={{flex: 2}} placeholder="輸入名稱" value={newSettingItem.value} onChange={(e) => setNewSettingItem({...newSettingItem, value: e.target.value})} />
+            <button className="btn-primary" style={{width: 'auto', padding: '10px'}} onClick={addSetting}><Plus size={20}/></button>
+          </div>
+          
+          <h4 style={{marginBottom: '5px'}}>指標清單：</h4>
+          {settings.metrics.map((m, i) => (
+            <div key={i} className="setting-item">
+              <span>{m}</span>
+              <button className="btn-icon" onClick={() => deleteSetting('metrics', i)}><Trash2 size={16}/></button>
+            </div>
+          ))}
+          <h4 style={{marginBottom: '5px', marginTop: '15px'}}>醫院清單：</h4>
+          {settings.clinics.map((c, i) => (
+            <div key={i} className="setting-item">
+              <span>{c}</span>
+              <button className="btn-icon" onClick={() => deleteSetting('clinics', i)}><Trash2 size={16}/></button>
+            </div>
+          ))}
+        </Modal>
+      )}
+
+      <div className="card">
+        <p style={{fontWeight: 'bold', color: 'var(--text-main)', marginTop: 0}}>勾選要比較的指數：</p>
+        <div className="checkbox-group">
+          {settings.metrics.map(metric => (
+            <label key={metric} className="checkbox-label">
+              <input 
+                type="checkbox" 
+                checked={selectedMetrics.includes(metric)} 
+                onChange={() => toggleMetric(metric)} 
+              />
+              {metric}
+            </label>
+          ))}
+        </div>
+
+        {sortedTests.length > 0 && selectedMetrics.length > 0 && (
+          <div style={{ height: 300, marginTop: 20 }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={sortedTests}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#EAE4D3"/>
+                <XAxis dataKey="date" tick={{fill: '#8A8A8A'}} axisLine={false} tickLine={false}/>
+                <YAxis tick={{fill: '#8A8A8A'}} axisLine={false} tickLine={false}/>
+                <Tooltip />
+                <Legend />
+                {selectedMetrics.map((metric, idx) => (
+                  <Line key={metric} type="monotone" dataKey={metric} stroke={lineColors[idx % lineColors.length]} strokeWidth={3} />
+                ))}
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+      </div>
+
+      <h3>歷年報告紀錄</h3>
+      {sortedTests.map(test => (
+        <div className="card" key={test.id}>
+          <div className="flex-between">
+            <h4 style={{margin: '0 0 5px 0', color: 'var(--primary-green)'}}>{test.date} - {test.clinic}</h4>
+            <button className="btn-icon" onClick={() => handleDelete(test.id)}><Trash2 size={18}/></button>
+          </div>
+          <div style={{display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '10px'}}>
+            {settings.metrics.map(m => test[m] !== undefined && (
+              <span key={m} style={{fontSize: '0.9rem', background: '#FAFAFA', padding: '4px 8px', borderRadius: '4px'}}>
+                {m}: {test[m]}
+              </span>
+            ))}
+          </div>
+        </div>
+      ))}
+
+      {showFormModal && (
+        <Modal title="新增血檢報告" onClose={() => setShowFormModal(false)}>
+          <div className="input-group">
+            <label>檢查日期</label>
+            <DatePicker
+              selected={form.date ? new Date(form.date + 'T00:00:00') : null}
+              onChange={date => {
+                if (date) {
+                  const yyyy = date.getFullYear();
+                  const mm = String(date.getMonth() + 1).padStart(2, '0');
+                  const dd = String(date.getDate()).padStart(2, '0');
+                  setForm({...form, date: `${yyyy}-${mm}-${dd}`});
+                } else {
+                  setForm({...form, date: ''});
+                }
+              }}
+              dateFormat="yyyy-MM-dd"
+              placeholderText="請選擇日期"
+            />
+          </div>
+          <div className="input-group">
+            <label>動物醫院</label>
+            <select value={form.clinic} onChange={e => setForm({...form, clinic: e.target.value})}>
+              {settings.clinics.length === 0 && <option value="">請先至設定新增醫院</option>}
+              {settings.clinics.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </div>
+          
+          <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px'}}>
+            {settings.metrics.map(m => (
+              <div className="input-group" key={m}>
+                <label>{m}</label>
+                <input type="number" step="0.1" value={form[m] || ''} onChange={e => setForm({...form, [m]: e.target.value})} />
+              </div>
+            ))}
+          </div>
+
+          <div className="input-group">
+            <label>上傳照片 (示意按鈕)</label>
+            <input type="file" accept="image/*" />
+          </div>
+
+          <button className="btn-primary" style={{marginTop: '20px'}} onClick={handleAdd}><Plus size={20}/> 儲存報告</button>
+        </Modal>
+      )}
+    </div>
+  );
+};
+
+// ==============================
+// 0. 登入與註冊介面 (Auth Screen)
+// ==============================
+const AuthScreen = () => {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError('');
+    try {
+      await api.auth.login(email, password);
+    } catch (err) {
+      setError('登入失敗，請檢查信箱與密碼是否正確。');
+    }
+  };
+
+  return (
+    <div className="auth-container">
+      <div className="auth-card">
+        <h1><BookHeart size={32} /> 波波日記本</h1>
+        <h3 style={{marginTop: 0, marginBottom: '20px'}}>登入您的帳號</h3>
+        {error && <div className="auth-error">{error}</div>}
+        <form onSubmit={handleSubmit} className="input-group">
+          <input type="email" placeholder="信箱" value={email} onChange={e => setEmail(e.target.value)} required />
+          <input type="password" placeholder="密碼" value={password} onChange={e => setPassword(e.target.value)} required />
+          <button type="submit" className="btn-primary" style={{marginTop: '10px'}}>登入</button>
+        </form>
+      </div>
+    </div>
+  );
+};
+
+// ==============================
+// 主應用程式與底部導覽列
+// ==============================
+export default function App() {
+  const [activeTab, setActiveTab] = useState(0);
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  // 監聽 Firebase 登入狀態
+  useEffect(() => {
+    const unsubscribe = api.auth.onAuthStateChanged(currentUser => {
+      setUser(currentUser);
+      setLoading(false);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  if (loading) return <div style={{padding: 50, textAlign: 'center'}}>載入中...</div>;
+  if (!user) return <AuthScreen />;
+
+  return (
+    <div className="app-container">
+      {/* 手機版 Header */}
+      <header className="app-header">
+        <BookHeart size={24} /> 波波的健康日記本
+        <button className="btn-icon" style={{color: 'white', marginLeft: 'auto'}} onClick={() => api.auth.logout()} title="登出">
+          <LogOut size={22} />
+        </button>
+      </header>
+
+      {/* 左側邊欄 (電腦版顯示) */}
+      <nav className="bottom-nav">
+        <div className="app-header" style={{display: 'none', background: 'transparent', color: 'var(--primary-orange)', marginBottom: '20px'}}>
+           <BookHeart size={28} /> <strong>波波日記本</strong>
+        </div>
+        <button className={`nav-btn ${activeTab === 0 ? 'active' : ''}`} onClick={() => setActiveTab(0)}>
+          <CalendarIcon size={24} /> <span>行事曆</span>
+        </button>
+        <button className={`nav-btn ${activeTab === 1 ? 'active' : ''}`} onClick={() => setActiveTab(1)}>
+          <Utensils size={24} /> <span>飲食與用藥</span>
+        </button>
+        <button className={`nav-btn ${activeTab === 2 ? 'active' : ''}`} onClick={() => setActiveTab(2)}>
+          <Activity size={24} /> <span>體重管理</span>
+        </button>
+        <button className={`nav-btn ${activeTab === 3 ? 'active' : ''}`} onClick={() => setActiveTab(3)}>
+          <Syringe size={24} /> <span>血檢報告</span>
+        </button>
+        
+        {/* 電腦版的登出按鈕 */}
+        <div style={{marginTop: 'auto', marginBottom: '20px', display: 'none'}} className="desktop-logout">
+          <button className="nav-btn" onClick={() => api.auth.logout()}>
+            <LogOut size={24} /> <span>登出帳號</span>
+          </button>
+        </div>
+      </nav>
+      
+      {/* 內容區塊 */}
+      <main className="app-content">
+        {activeTab === 0 && <CalendarTab />}
+        {activeTab === 1 && <DietTab />}
+        {activeTab === 2 && <WeightTab />}
+        {activeTab === 3 && <BloodTestTab />}
+      </main>
+    </div>
+  );
+}

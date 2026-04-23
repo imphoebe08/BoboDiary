@@ -1,0 +1,471 @@
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap');
+
+:root {
+  --bg-color: #F9F6F0; /* 暖杏白 */
+  --primary-green: #8FB9A8; /* 鼠尾草綠 */
+  --primary-orange: #E6A87C; /* 赤陶橘 */
+  --primary-yellow: #E2C275; /* 芥末黃 */
+  --text-main: #4A4A4A;
+  --text-light: #8A8A8A;
+  --card-bg: #FFFFFF;
+  --border-color: #EAE4D3;
+}
+
+body {
+  margin: 0;
+  background-color: var(--bg-color);
+}
+
+/* 響應式基礎框架 */
+.app-container {
+  font-family: 'Noto Sans TC', sans-serif;
+  color: var(--text-main);
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* 頂部 Header */
+.app-header {
+  background-color: var(--primary-orange);
+  color: #FFF;
+  padding: 15px 20px;
+  font-size: 1.2rem;
+  font-weight: bold;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+  z-index: 10;
+}
+
+/* 中間內容區 */
+.app-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+  padding-bottom: 90px;
+  background-color: var(--bg-color);
+}
+
+/* 底部選單 */
+.bottom-nav {
+  position: fixed;
+  bottom: 0;
+  width: 100%;
+  background-color: var(--card-bg);
+  display: flex;
+  justify-content: space-around;
+  padding: 10px 0;
+  box-shadow: 0 -2px 10px rgba(0,0,0,0.05);
+  z-index: 1000;
+  border-top: 1px solid var(--border-color);
+}
+
+.nav-btn {
+  background: none;
+  border: none;
+  color: var(--text-light);
+  font-size: 0.9rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  transition: color 0.2s;
+}
+
+.nav-btn.active {
+  color: var(--primary-green);
+  font-weight: bold;
+}
+
+/* 電腦版樣式 (Tablet & Desktop) */
+@media (min-width: 768px) {
+  .app-container {
+    flex-direction: row;
+  }
+  .app-header {
+    display: none; /* 在電腦版我們可以將標題放到側邊欄 */
+  }
+  .bottom-nav {
+    position: static;
+    width: 250px;
+    height: 100vh;
+    flex-direction: column;
+    justify-content: flex-start;
+    padding-top: 30px;
+    border-top: none;
+    border-right: 1px solid var(--border-color);
+  }
+  .nav-btn {
+    flex-direction: row;
+    padding: 15px 30px;
+    font-size: 1.1rem;
+    gap: 15px;
+  }
+  .app-content {
+    padding-bottom: 20px;
+  }
+  .desktop-logout {
+    display: block !important;
+  }
+}
+
+/* 卡片與表單元素 */
+.card {
+  background-color: var(--card-bg);
+  border-radius: 12px;
+  padding: 20px;
+  margin-bottom: 15px;
+  border: 1px solid var(--border-color);
+  box-shadow: 0 4px 6px rgba(0,0,0,0.02);
+}
+
+.flex-between {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.input-group {
+  margin-bottom: 15px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.input-group label {
+  font-weight: bold;
+  color: var(--primary-green);
+  font-size: 0.95rem;
+}
+
+input, select {
+  padding: 12px;
+  border-radius: 8px;
+  border: 1px solid #CCC;
+  font-family: inherit;
+  background-color: #FAFAFA;
+  color: var(--text-main);
+}
+
+input:focus, select:focus {
+  outline: none;
+  border-color: var(--primary-yellow);
+}
+
+.btn-group {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 15px;
+}
+
+.btn-primary {
+  background-color: var(--primary-yellow);
+  color: white;
+  border: none;
+  padding: 12px;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-weight: bold;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+}
+
+.btn-primary:hover {
+  background-color: #D4B263;
+}
+
+.btn-secondary {
+  background-color: transparent;
+  border: 1px solid var(--primary-green);
+  color: var(--primary-green);
+  padding: 8px 16px;
+  border-radius: 20px;
+  cursor: pointer;
+  font-weight: bold;
+}
+
+.btn-secondary.active {
+  background-color: var(--primary-green);
+  color: white;
+}
+
+.btn-icon {
+  background: none;
+  border: none;
+  color: var(--text-light);
+  cursor: pointer;
+  padding: 5px;
+}
+
+.btn-icon:hover {
+  color: var(--primary-orange);
+}
+
+/* 血檢多選 Checkbox 區域 */
+.checkbox-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.checkbox-label {
+  background: var(--bg-color);
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--border-color);
+  cursor: pointer;
+}
+
+h2 {
+  color: var(--text-main);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 0;
+}
+
+h3 {
+  color: var(--primary-orange);
+  font-size: 1.1rem;
+}
+
+/* 日曆樣式 */
+.calendar-title-bar {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin-bottom: 15px;
+}
+
+.calendar-title-bar > .btn-primary {
+  position: absolute;
+  right: 0;
+}
+
+.calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 5px;
+  text-align: center;
+}
+
+.calendar-header-cell {
+  font-weight: bold;
+  color: var(--primary-green);
+  padding: 10px 0;
+}
+
+.calendar-cell {
+  aspect-ratio: 1 / 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 5px;
+  border-radius: 8px;
+  background-color: #FAFAFA;
+  font-size: 0.9rem;
+  border: 1px solid #EEE;
+}
+
+.calendar-cell.has-event {
+  background-color: #FFF3E0;
+  border-color: var(--primary-yellow);
+}
+
+.calendar-cell.empty {
+  background-color: transparent;
+  border: none;
+}
+
+.event-dot {
+  width: 6px;
+  height: 6px;
+  background-color: var(--primary-orange);
+  border-radius: 50%;
+  margin-top: 4px;
+}
+
+.tag {
+  background-color: var(--primary-green);
+  color: white;
+  padding: 4px 8px;
+  border-radius: 12px;
+  font-size: 0.8rem;
+  margin-right: 8px;
+}
+
+.setting-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  background: #FAFAFA;
+  border-radius: 6px;
+  margin-bottom: 5px;
+}
+
+/* 彈跳視窗 (Modal) */
+.modal-overlay {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 2000;
+  padding: 20px;
+}
+
+.modal-content {
+  background-color: var(--bg-color);
+  border-radius: 16px;
+  padding: 25px;
+  width: 100%;
+  max-width: 450px;
+  max-height: 85vh;
+  overflow-y: auto;
+  box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  border-bottom: 2px solid var(--border-color);
+  padding-bottom: 10px;
+}
+
+/* react-datepicker 主題化與置中修正 */
+.react-datepicker-popper {
+  z-index: 2001 !important; /* 確保在 modal 之上 */
+}
+
+.react-datepicker {
+  font-family: 'Noto Sans TC', sans-serif;
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+  background-color: var(--card-bg);
+}
+
+.react-datepicker__header {
+  position: relative;
+  background-color: transparent;
+  border-bottom: 1px solid var(--border-color);
+  padding: 18px 0 12px 0; /* 增加上下留白，讓頭部更舒適 */
+  text-align: center; /* 讓頭部內容預設置中 */
+  display: block !important; /* 確保頭部是區塊元素，避免內部被擠壓 */
+}
+
+.react-datepicker__current-month {
+  font-size: 1.1rem;
+  font-weight: bold;
+  color: var(--primary-orange);
+  padding: 0 45px; /* 關鍵：強制向左右撐開空間，避免箭頭覆蓋文字 */
+  width: 100% !important;
+  box-sizing: border-box !important;
+  display: flex !important;
+  justify-content: center !important;
+  align-items: center !important;
+  text-align: center !important;
+}
+
+.react-datepicker__navigation {
+  top: 17px !important; /* 稍微下移，與新的標題位置垂直置中對齊 */
+}
+
+.react-datepicker__navigation--previous {
+  left: 15px;
+  position: absolute;
+}
+
+.react-datepicker__navigation--next {
+  right: 15px;
+  position: absolute;
+}
+
+.react-datepicker__navigation-icon::before {
+  border-color: var(--primary-green);
+  border-width: 2px 2px 0 0;
+}
+
+.react-datepicker__navigation:hover .react-datepicker__navigation-icon::before {
+  border-color: var(--primary-orange);
+}
+
+.react-datepicker__day-name {
+  color: var(--primary-green);
+  font-weight: 500;
+}
+
+.react-datepicker__day--selected, .react-datepicker__day--in-selecting-range, .react-datepicker__day--in-range {
+  background-color: var(--primary-yellow);
+  color: white;
+  font-weight: bold;
+}
+.react-datepicker__day--selected:hover, .react-datepicker__day--in-selecting-range:hover, .react-datepicker__day--in-range:hover {
+  background-color: #D4B263;
+}
+
+.react-datepicker__day--keyboard-selected {
+  background-color: #f0f0f0;
+  color: var(--text-main);
+}
+
+.react-datepicker__day--today {
+  font-weight: bold;
+}
+
+.react-datepicker__day--outside-month {
+  color: #ccc;
+}
+
+/* 登入與註冊介面 */
+.auth-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+  background-color: var(--primary-green);
+  padding: 20px;
+  box-sizing: border-box;
+}
+.auth-card {
+  background: var(--card-bg);
+  padding: 35px 30px;
+  border-radius: 16px;
+  width: 100%;
+  max-width: 400px;
+  box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+  text-align: center;
+}
+.auth-toggle {
+  color: var(--primary-green);
+  cursor: pointer;
+  margin-top: 15px;
+  font-size: 0.9rem;
+  text-decoration: underline;
+}
+.auth-error {
+  color: #d9534f;
+  font-size: 0.9rem;
+  margin-bottom: 15px;
+  background: #fdf2f2;
+  padding: 8px;
+  border-radius: 6px;
+}
