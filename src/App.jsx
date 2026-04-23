@@ -387,16 +387,29 @@ const DietTab = () => {
 const WeightTab = () => {
   const [weights, setWeights] = useState([]);
   const [showFormModal, setShowFormModal] = useState(false);
+  const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState({ date: '', weight: '' });
 
   useEffect(() => { api.getWeights().then(setWeights); }, []);
 
-  const handleAdd = async () => {
+  const handleSave = async () => {
     if (!form.date || !form.weight) return;
-    await api.addWeight({ date: form.date, weight: parseFloat(form.weight) });
+    const weightVal = parseFloat(form.weight);
+    if (editingId) {
+      await api.updateWeight(editingId, { date: form.date, weight: weightVal });
+    } else {
+      await api.addWeight({ date: form.date, weight: weightVal });
+    }
     setWeights(await api.getWeights());
     setForm({ date: '', weight: '' });
+    setEditingId(null);
     setShowFormModal(false);
+  };
+
+  const handleEdit = (w) => {
+    setForm({ date: w.date, weight: w.weight });
+    setEditingId(w.id);
+    setShowFormModal(true);
   };
 
   const handleDelete = async (id) => {
@@ -410,7 +423,7 @@ const WeightTab = () => {
     <div>
       <div className="flex-between">
         <h2><Activity /> 體重走勢</h2>
-        <button className="btn-primary" style={{width: 'auto', padding: '8px 12px'}} onClick={() => setShowFormModal(true)}>
+        <button className="btn-primary" style={{width: 'auto', padding: '8px 12px'}} onClick={() => { setEditingId(null); setForm({ date: '', weight: '' }); setShowFormModal(true); }}>
           <Plus size={18} /> 新增
         </button>
       </div>
@@ -433,15 +446,16 @@ const WeightTab = () => {
       {sortedWeights.map(w => (
         <div className="card flex-between" key={w.id} style={{padding: '12px 20px'}}>
           <span>{w.date}</span>
-          <div style={{display: 'flex', alignItems: 'center', gap: '15px'}}>
-            <strong>{w.weight} kg</strong>
+          <div style={{display: 'flex', alignItems: 'center', gap: '10px'}}>
+            <strong style={{marginRight: '5px'}}>{w.weight} kg</strong>
+            <button className="btn-icon" onClick={() => handleEdit(w)}><Edit2 size={16}/></button>
             <button className="btn-icon" onClick={() => handleDelete(w.id)}><Trash2 size={16}/></button>
           </div>
         </div>
       ))}
       
       {showFormModal && (
-        <Modal title="新增體重紀錄" onClose={() => setShowFormModal(false)}>
+        <Modal title={editingId ? "編輯體重紀錄" : "新增體重紀錄"} onClose={() => setShowFormModal(false)}>
           <div className="input-group">
             <label>測量日期</label>
             <DatePicker
@@ -464,7 +478,7 @@ const WeightTab = () => {
             <label>體重 (kg)</label>
             <input type="number" step="0.1" value={form.weight} onChange={e => setForm({...form, weight: e.target.value})} />
           </div>
-          <button className="btn-primary" style={{marginTop: '20px'}} onClick={handleAdd}><Plus size={20}/> 儲存</button>
+          <button className="btn-primary" style={{marginTop: '20px'}} onClick={handleSave}><Plus size={20}/> {editingId ? '儲存修改' : '儲存'}</button>
         </Modal>
       )}
     </div>
@@ -479,6 +493,7 @@ const BloodTestTab = () => {
   const [settings, setSettings] = useState({ clinics: [], metrics: [] });
   const [showSettings, setShowSettings] = useState(false);
   const [showFormModal, setShowFormModal] = useState(false);
+  const [editingId, setEditingId] = useState(null);
   
   // Form state for adding/editing tests
   const [form, setForm] = useState({ date: '', clinic: '' }); 
@@ -486,6 +501,7 @@ const BloodTestTab = () => {
 
   // Form state for Settings
   const [newSettingItem, setNewSettingItem] = useState({ type: 'metrics', value: '' });
+  const [editingSetting, setEditingSetting] = useState({ type: null, index: null, value: '' });
 
   const lineColors = ['#E6A87C', '#8FB9A8', '#E2C275', '#A593E0', '#56A8CB'];
 
@@ -498,7 +514,7 @@ const BloodTestTab = () => {
     });
   }, []);
 
-  const handleAdd = async () => {
+  const handleSave = async () => {
     if (!form.date) return;
     
     // Prepare data: convert metric string values to floats
@@ -509,13 +525,28 @@ const BloodTestTab = () => {
       }
     });
 
-    await api.addBloodTest(testData);
+    if (editingId) {
+      await api.updateBloodTest(editingId, testData);
+    } else {
+      await api.addBloodTest(testData);
+    }
     setTests(await api.getBloodTests());
     
-    // Reset form keeping the clinic
-    const resetForm = { date: '', clinic: form.clinic };
-    setForm(resetForm);
+    setForm({ date: '', clinic: form.clinic });
+    setEditingId(null);
     setShowFormModal(false);
+  };
+
+  const handleEdit = (test) => {
+    const editForm = { date: test.date, clinic: test.clinic };
+    settings.metrics.forEach(m => {
+      if (test[m] !== undefined) {
+        editForm[m] = test[m];
+      }
+    });
+    setForm(editForm);
+    setEditingId(test.id);
+    setShowFormModal(true);
   };
 
   const handleDelete = async (id) => {
@@ -540,6 +571,17 @@ const BloodTestTab = () => {
     setNewSettingItem({...newSettingItem, value: ''});
   };
 
+  const saveEditSetting = async () => {
+    if(!editingSetting.value) return;
+    const { type, index, value } = editingSetting;
+    const updatedList = [...settings[type]];
+    updatedList[index] = value;
+    const updated = { ...settings, [type]: updatedList };
+    await api.saveBloodTestSettings(updated);
+    setSettings(updated);
+    setEditingSetting({ type: null, index: null, value: '' });
+  };
+
   const deleteSetting = async (type, index) => {
     const updatedList = [...settings[type]];
     updatedList.splice(index, 1);
@@ -550,13 +592,39 @@ const BloodTestTab = () => {
 
   const sortedTests = [...tests].sort((a,b) => new Date(a.date) - new Date(b.date));
 
+  const renderSettingItem = (item, index, type) => {
+    if (editingSetting.type === type && editingSetting.index === index) {
+      return (
+        <div key={index} className="setting-item" style={{ display: 'flex', gap: '5px' }}>
+          <input 
+            type="text" 
+            style={{flex: 1, padding: '4px'}} 
+            value={editingSetting.value} 
+            onChange={(e) => setEditingSetting({...editingSetting, value: e.target.value})} 
+          />
+          <button className="btn-primary" style={{padding: '4px 10px', width: 'auto'}} onClick={saveEditSetting}>儲存</button>
+          <button className="btn-icon" onClick={() => setEditingSetting({type: null, index: null, value: ''})}><X size={16}/></button>
+        </div>
+      );
+    }
+    return (
+      <div key={index} className="setting-item">
+        <span>{item}</span>
+        <div>
+          <button className="btn-icon" onClick={() => setEditingSetting({type, index, value: item})}><Edit2 size={16}/></button>
+          <button className="btn-icon" onClick={() => deleteSetting(type, index)}><Trash2 size={16}/></button>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div>
       <div className="flex-between">
         <h2><Syringe /> 血液檢查</h2>
         <div>
           <button className="btn-icon" onClick={() => setShowSettings(true)}><Settings size={24} /></button>
-          <button className="btn-primary" style={{width: 'auto', padding: '8px 12px', display: 'inline-flex', marginLeft: '10px'}} onClick={() => setShowFormModal(true)}>
+          <button className="btn-primary" style={{width: 'auto', padding: '8px 12px', display: 'inline-flex', marginLeft: '10px'}} onClick={() => { setEditingId(null); setForm({ date: '', clinic: settings.clinics[0] || '' }); setShowFormModal(true); }}>
             <Plus size={18} /> 新增
           </button>
         </div>
@@ -574,19 +642,9 @@ const BloodTestTab = () => {
           </div>
           
           <h4 style={{marginBottom: '5px'}}>指標清單：</h4>
-          {settings.metrics.map((m, i) => (
-            <div key={i} className="setting-item">
-              <span>{m}</span>
-              <button className="btn-icon" onClick={() => deleteSetting('metrics', i)}><Trash2 size={16}/></button>
-            </div>
-          ))}
+          {settings.metrics.map((m, i) => renderSettingItem(m, i, 'metrics'))}
           <h4 style={{marginBottom: '5px', marginTop: '15px'}}>醫院清單：</h4>
-          {settings.clinics.map((c, i) => (
-            <div key={i} className="setting-item">
-              <span>{c}</span>
-              <button className="btn-icon" onClick={() => deleteSetting('clinics', i)}><Trash2 size={16}/></button>
-            </div>
-          ))}
+          {settings.clinics.map((c, i) => renderSettingItem(c, i, 'clinics'))}
         </Modal>
       )}
 
@@ -628,7 +686,10 @@ const BloodTestTab = () => {
         <div className="card" key={test.id}>
           <div className="flex-between">
             <h4 style={{margin: '0 0 5px 0', color: 'var(--primary-green)'}}>{test.date} - {test.clinic}</h4>
-            <button className="btn-icon" onClick={() => handleDelete(test.id)}><Trash2 size={18}/></button>
+            <div>
+              <button className="btn-icon" onClick={() => handleEdit(test)}><Edit2 size={18}/></button>
+              <button className="btn-icon" onClick={() => handleDelete(test.id)}><Trash2 size={18}/></button>
+            </div>
           </div>
           <div style={{display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '10px'}}>
             {settings.metrics.map(m => test[m] !== undefined && (
@@ -641,7 +702,7 @@ const BloodTestTab = () => {
       ))}
 
       {showFormModal && (
-        <Modal title="新增血檢報告" onClose={() => setShowFormModal(false)}>
+        <Modal title={editingId ? "編輯血檢報告" : "新增血檢報告"} onClose={() => setShowFormModal(false)}>
           <div className="input-group">
             <label>檢查日期</label>
             <DatePicker
@@ -682,7 +743,7 @@ const BloodTestTab = () => {
             <input type="file" accept="image/*" />
           </div>
 
-          <button className="btn-primary" style={{marginTop: '20px'}} onClick={handleAdd}><Plus size={20}/> 儲存報告</button>
+          <button className="btn-primary" style={{marginTop: '20px'}} onClick={handleSave}><Plus size={20}/> {editingId ? '儲存修改' : '儲存報告'}</button>
         </Modal>
       )}
     </div>

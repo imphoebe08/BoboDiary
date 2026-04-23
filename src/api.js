@@ -92,6 +92,9 @@ export const api = {
   addWeight: async (weight) => {
     await addDoc(collection(db, 'users', getUid(), 'weights'), weight);
   },
+  updateWeight: async (id, updatedWeight) => {
+    await updateDoc(doc(db, 'users', getUid(), 'weights', id), updatedWeight);
+  },
   deleteWeight: async (id) => {
     await deleteDoc(doc(db, 'users', getUid(), 'weights', id));
   },
@@ -103,6 +106,9 @@ export const api = {
   },
   addBloodTest: async (test) => {
     await addDoc(collection(db, 'users', getUid(), 'bloodtests'), test);
+  },
+  updateBloodTest: async (id, updatedTest) => {
+    await updateDoc(doc(db, 'users', getUid(), 'bloodtests', id), updatedTest);
   },
   deleteBloodTest: async (id) => {
     await deleteDoc(doc(db, 'users', getUid(), 'bloodtests', id));
