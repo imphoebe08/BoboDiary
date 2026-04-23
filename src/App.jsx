@@ -500,16 +500,21 @@ const BloodTestTab = () => {
   const [selectedMetrics, setSelectedMetrics] = useState([]);
 
   // Form state for Settings
-  const [newSettingItem, setNewSettingItem] = useState({ type: 'metrics', value: '' });
-  const [editingSetting, setEditingSetting] = useState({ type: null, index: null, value: '' });
+  const [newSettingItem, setNewSettingItem] = useState({ type: 'metrics', value: '', name: '', min: '', max: '' });
+  const [editingSetting, setEditingSetting] = useState({ type: null, index: null, value: '', name: '', min: '', max: '' });
+  const [dragIndex, setDragIndex] = useState(null);
 
   const lineColors = ['#E6A87C', '#8FB9A8', '#E2C275', '#A593E0', '#56A8CB'];
 
   useEffect(() => { 
     api.getBloodTests().then(setTests);
     api.getBloodTestSettings().then(res => {
-      setSettings(res);
-      setSelectedMetrics(res.metrics.slice(0, 2)); // Default check first 2
+      const normalizedMetrics = (res.metrics || []).map(m => 
+        typeof m === 'string' ? { name: m, min: '', max: '' } : m
+      );
+      const normalizedSettings = { ...res, metrics: normalizedMetrics };
+      setSettings(normalizedSettings);
+      setSelectedMetrics(normalizedMetrics.slice(0, 2).map(m => m.name));
       if(res.clinics.length > 0) setForm(prev => ({...prev, clinic: res.clinics[0]}));
     });
   }, []);
@@ -520,8 +525,8 @@ const BloodTestTab = () => {
     // Prepare data: convert metric string values to floats
     const testData = { date: form.date, clinic: form.clinic };
     settings.metrics.forEach(m => {
-      if (form[m] !== undefined && form[m] !== '') {
-        testData[m] = parseFloat(form[m]);
+      if (form[m.name] !== undefined && form[m.name] !== '') {
+        testData[m.name] = parseFloat(form[m.name]);
       }
     });
 
@@ -540,8 +545,8 @@ const BloodTestTab = () => {
   const handleEdit = (test) => {
     const editForm = { date: test.date, clinic: test.clinic };
     settings.metrics.forEach(m => {
-      if (test[m] !== undefined) {
-        editForm[m] = test[m];
+      if (test[m.name] !== undefined) {
+        editForm[m.name] = test[m.name];
       }
     });
     setForm(editForm);
@@ -564,22 +569,34 @@ const BloodTestTab = () => {
 
   // Settings Management
   const addSetting = async () => {
-    if(!newSettingItem.value) return;
-    const updated = { ...settings, [newSettingItem.type]: [...settings[newSettingItem.type], newSettingItem.value] };
+    let updated;
+    if (newSettingItem.type === 'metrics') {
+      if (!newSettingItem.name) return;
+      const newMetric = { name: newSettingItem.name, min: newSettingItem.min, max: newSettingItem.max };
+      updated = { ...settings, metrics: [...settings.metrics, newMetric] };
+    } else {
+      if (!newSettingItem.value) return;
+      updated = { ...settings, clinics: [...settings.clinics, newSettingItem.value] };
+    }
     await api.saveBloodTestSettings(updated);
     setSettings(updated);
-    setNewSettingItem({...newSettingItem, value: ''});
+    setNewSettingItem({ type: newSettingItem.type, value: '', name: '', min: '', max: '' });
   };
 
   const saveEditSetting = async () => {
-    if(!editingSetting.value) return;
-    const { type, index, value } = editingSetting;
+    const { type, index } = editingSetting;
     const updatedList = [...settings[type]];
-    updatedList[index] = value;
+    if (type === 'metrics') {
+      if (!editingSetting.name) return;
+      updatedList[index] = { name: editingSetting.name, min: editingSetting.min, max: editingSetting.max };
+    } else {
+      if (!editingSetting.value) return;
+      updatedList[index] = editingSetting.value;
+    }
     const updated = { ...settings, [type]: updatedList };
     await api.saveBloodTestSettings(updated);
     setSettings(updated);
-    setEditingSetting({ type: null, index: null, value: '' });
+    setEditingSetting({ type: null, index: null, value: '', name: '', min: '', max: '' });
   };
 
   const deleteSetting = async (type, index) => {
@@ -590,10 +607,40 @@ const BloodTestTab = () => {
     setSettings(updated);
   };
 
+  // Drag and Drop for Metrics
+  const handleDragStart = (index) => setDragIndex(index);
+  
+  const handleDragEnter = (index) => {
+    if (dragIndex === null || dragIndex === index) return;
+    const newMetrics = [...settings.metrics];
+    const draggedItem = newMetrics[dragIndex];
+    newMetrics.splice(dragIndex, 1);
+    newMetrics.splice(index, 0, draggedItem);
+    setDragIndex(index);
+    setSettings({ ...settings, metrics: newMetrics });
+  };
+
+  const handleDragEnd = async () => {
+    setDragIndex(null);
+    await api.saveBloodTestSettings(settings);
+  };
+
   const sortedTests = [...tests].sort((a,b) => new Date(a.date) - new Date(b.date));
 
   const renderSettingItem = (item, index, type) => {
-    if (editingSetting.type === type && editingSetting.index === index) {
+    const isEditing = editingSetting.type === type && editingSetting.index === index;
+    if (isEditing) {
+      if (type === 'metrics') {
+        return (
+          <div key={index} className="setting-item" style={{ display: 'flex', gap: '5px' }}>
+            <input type="text" placeholder="指標" style={{flex: 2, padding: '4px'}} value={editingSetting.name} onChange={e => setEditingSetting({...editingSetting, name: e.target.value})} />
+            <input type="number" placeholder="下限" style={{flex: 1, padding: '4px'}} value={editingSetting.min} onChange={e => setEditingSetting({...editingSetting, min: e.target.value})} />
+            <input type="number" placeholder="上限" style={{flex: 1, padding: '4px'}} value={editingSetting.max} onChange={e => setEditingSetting({...editingSetting, max: e.target.value})} />
+            <button className="btn-primary" style={{padding: '4px 10px', width: 'auto'}} onClick={saveEditSetting}>儲存</button>
+            <button className="btn-icon" onClick={() => setEditingSetting({type: null, index: null, value: '', name: '', min: '', max: ''})}><X size={16}/></button>
+          </div>
+        );
+      }
       return (
         <div key={index} className="setting-item" style={{ display: 'flex', gap: '5px' }}>
           <input 
@@ -603,10 +650,32 @@ const BloodTestTab = () => {
             onChange={(e) => setEditingSetting({...editingSetting, value: e.target.value})} 
           />
           <button className="btn-primary" style={{padding: '4px 10px', width: 'auto'}} onClick={saveEditSetting}>儲存</button>
-          <button className="btn-icon" onClick={() => setEditingSetting({type: null, index: null, value: ''})}><X size={16}/></button>
+          <button className="btn-icon" onClick={() => setEditingSetting({type: null, index: null, value: '', name: '', min: '', max: ''})}><X size={16}/></button>
         </div>
       );
     }
+    
+    if (type === 'metrics') {
+      return (
+        <div 
+          key={index} 
+          className="setting-item"
+          draggable
+          onDragStart={() => handleDragStart(index)}
+          onDragEnter={() => handleDragEnter(index)}
+          onDragEnd={handleDragEnd}
+          onDragOver={(e) => e.preventDefault()}
+          style={{ cursor: 'grab', opacity: dragIndex === index ? 0.5 : 1 }}
+        >
+          <span>☰ {item.name} { (item.min || item.max) ? `(${item.min || '-'} ~ ${item.max || '-'})` : '' }</span>
+          <div>
+            <button className="btn-icon" onClick={() => setEditingSetting({type, index, name: item.name, min: item.min, max: item.max})}><Edit2 size={16}/></button>
+            <button className="btn-icon" onClick={() => deleteSetting(type, index)}><Trash2 size={16}/></button>
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div key={index} className="setting-item">
         <span>{item}</span>
@@ -632,13 +701,23 @@ const BloodTestTab = () => {
 
       {showSettings && (
         <Modal title="管理醫院與追蹤指標" onClose={() => setShowSettings(false)}>
-          <div className="input-group" style={{flexDirection: 'row'}}>
-            <select style={{flex: 1}} value={newSettingItem.type} onChange={(e) => setNewSettingItem({...newSettingItem, type: e.target.value})}>
+          <div className="input-group" style={{flexDirection: 'column'}}>
+            <select value={newSettingItem.type} onChange={(e) => setNewSettingItem({...newSettingItem, type: e.target.value})}>
               <option value="metrics">追蹤指標</option>
               <option value="clinics">動物醫院</option>
             </select>
-            <input type="text" style={{flex: 2}} placeholder="輸入名稱" value={newSettingItem.value} onChange={(e) => setNewSettingItem({...newSettingItem, value: e.target.value})} />
-            <button className="btn-primary" style={{width: 'auto', padding: '10px'}} onClick={addSetting}><Plus size={20}/></button>
+            <div style={{display: 'flex', gap: '5px', width: '100%'}}>
+              {newSettingItem.type === 'metrics' ? (
+                <>
+                  <input type="text" style={{flex: 2}} placeholder="指標名稱" value={newSettingItem.name} onChange={(e) => setNewSettingItem({...newSettingItem, name: e.target.value})} />
+                  <input type="number" style={{flex: 1}} placeholder="下限" value={newSettingItem.min} onChange={(e) => setNewSettingItem({...newSettingItem, min: e.target.value})} />
+                  <input type="number" style={{flex: 1}} placeholder="上限" value={newSettingItem.max} onChange={(e) => setNewSettingItem({...newSettingItem, max: e.target.value})} />
+                </>
+              ) : (
+                <input type="text" style={{flex: 1}} placeholder="輸入名稱" value={newSettingItem.value} onChange={(e) => setNewSettingItem({...newSettingItem, value: e.target.value})} />
+              )}
+              <button className="btn-primary" style={{width: 'auto', padding: '10px'}} onClick={addSetting}><Plus size={20}/></button>
+            </div>
           </div>
           
           <h4 style={{marginBottom: '5px'}}>指標清單：</h4>
@@ -652,13 +731,13 @@ const BloodTestTab = () => {
         <p style={{fontWeight: 'bold', color: 'var(--text-main)', marginTop: 0}}>勾選要比較的指數：</p>
         <div className="checkbox-group">
           {settings.metrics.map(metric => (
-            <label key={metric} className="checkbox-label">
+            <label key={metric.name} className="checkbox-label">
               <input 
                 type="checkbox" 
-                checked={selectedMetrics.includes(metric)} 
-                onChange={() => toggleMetric(metric)} 
+                checked={selectedMetrics.includes(metric.name)} 
+                onChange={() => toggleMetric(metric.name)} 
               />
-              {metric}
+              {metric.name}
             </label>
           ))}
         </div>
@@ -692,11 +771,30 @@ const BloodTestTab = () => {
             </div>
           </div>
           <div style={{display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '10px'}}>
-            {settings.metrics.map(m => test[m] !== undefined && (
-              <span key={m} style={{fontSize: '0.9rem', background: '#FAFAFA', padding: '4px 8px', borderRadius: '4px'}}>
-                {m}: {test[m]}
+          {settings.metrics.map(m => {
+            const val = test[m.name];
+            if (val === undefined || val === '') return null;
+            
+            let color = 'inherit';
+            let suffix = '';
+            let fontWeight = 'normal';
+            
+            if (m.min !== '' && m.min !== undefined && val < parseFloat(m.min)) {
+              color = '#4CAF50'; // 綠色
+              suffix = ' (L)';
+              fontWeight = 'bold';
+            } else if (m.max !== '' && m.max !== undefined && val > parseFloat(m.max)) {
+              color = '#F44336'; // 紅色
+              suffix = ' (H)';
+              fontWeight = 'bold';
+            }
+            
+            return (
+              <span key={m.name} style={{fontSize: '0.9rem', background: '#FAFAFA', padding: '4px 8px', borderRadius: '4px', color, fontWeight}}>
+                {m.name}: {val}{suffix}
               </span>
-            ))}
+            );
+          })}
           </div>
         </div>
       ))}
@@ -731,9 +829,9 @@ const BloodTestTab = () => {
           
           <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px'}}>
             {settings.metrics.map(m => (
-              <div className="input-group" key={m}>
-                <label>{m}</label>
-                <input type="number" step="0.1" value={form[m] || ''} onChange={e => setForm({...form, [m]: e.target.value})} />
+              <div className="input-group" key={m.name}>
+                <label>{m.name}</label>
+                <input type="number" step="0.1" value={form[m.name] || ''} onChange={e => setForm({...form, [m.name]: e.target.value})} />
               </div>
             ))}
           </div>

@@ -118,7 +118,10 @@ export const api = {
   getBloodTestSettings: async () => {
     const d = await getDoc(doc(db, 'users', getUid(), 'settings', 'bloodtest'));
     if (d.exists()) return d.data();
-    return { clinics: ['波波動物醫院'], metrics: ['BUN', 'CREA', 'WBC', 'ALT', 'ALKP'] };
+    return { 
+      clinics: ['波波動物醫院'], 
+      metrics: [{name:'BUN', min:'', max:''}, {name:'CREA', min:'', max:''}, {name:'WBC', min:'', max:''}, {name:'ALT', min:'', max:''}, {name:'ALKP', min:'', max:''}] 
+    };
   },
   saveBloodTestSettings: async (settings) => {
     await setDoc(doc(db, 'users', getUid(), 'settings', 'bloodtest'), settings);
