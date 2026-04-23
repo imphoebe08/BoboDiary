@@ -22,8 +22,8 @@ const auth = getAuth(app);
 const getUid = () => {
   const user = auth.currentUser;
   if (!user) throw new Error("請先登入");
-  // 改為回傳固定的名稱，讓所有登入的家人都讀寫同一個資料夾
-  return "shared_family_database";
+  // 將這裡換成您剛剛複製的原本 UID，這樣全家人就會連線到您的舊資料夾！
+  return "dXIHjR0IZ2bsrZCCNWE6EKJ7jKq2"; 
 };
 
 export const api = {
