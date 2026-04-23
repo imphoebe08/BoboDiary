@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { Calendar as CalendarIcon, Utensils, Activity, Syringe, Plus, Trash2, Edit2, Settings, BookHeart, X, LogOut } from 'lucide-react';
+import { Calendar as CalendarIcon, Utensils, Activity, Syringe, Plus, Trash2, Edit2, Settings, BookHeart, X, LogOut, ChevronLeft, ChevronRight } from 'lucide-react';
 import './bobo-theme.css';
 import { api } from './api';
 
@@ -27,14 +27,21 @@ const CalendarTab = () => {
   const [settings, setSettings] = useState({ categories: [] });
   const [showFormModal, setShowFormModal] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
-  const [form, setForm] = useState({ date: '', title: '', type: '就醫' });
+  const [form, setForm] = useState({ date: '', title: '', type: '就醫', repeatDays: '' });
   const [editingId, setEditingId] = useState(null);
   const [viewMode, setViewMode] = useState('month'); // 'month' or 'all'
   const [newCat, setNewCat] = useState('');
 
-  const currentDate = new Date();
-  const currentYear = currentDate.getFullYear();
-  const currentMonth = currentDate.getMonth(); // 0-11
+  const [viewDate, setViewDate] = useState(new Date());
+  const currentYear = viewDate.getFullYear();
+  const currentMonth = viewDate.getMonth(); // 0-11
+
+  const todayObj = new Date();
+  const todayStr = `${todayObj.getFullYear()}-${String(todayObj.getMonth() + 1).padStart(2, '0')}-${String(todayObj.getDate()).padStart(2, '0')}`;
+
+  const handlePrevMonth = () => setViewDate(new Date(currentYear, currentMonth - 1, 1));
+  const handleNextMonth = () => setViewDate(new Date(currentYear, currentMonth + 1, 1));
+  const handleToday = () => setViewDate(new Date());
 
   useEffect(() => { 
     api.getEvents().then(setEvents); 
@@ -46,20 +53,29 @@ const CalendarTab = () => {
 
   const handleSave = async () => {
     if (!form.date || !form.title) return;
+    const eventData = { ...form, repeatDays: parseInt(form.repeatDays) || 0 };
     if (editingId) {
-      await api.updateEvent(editingId, form);
+      await api.updateEvent(editingId, eventData);
     } else {
-      await api.addEvent(form);
+      await api.addEvent(eventData);
     }
     setEvents(await api.getEvents());
-    setForm({ date: '', title: '', type: settings.categories[0] || '就醫' });
+    setForm({ date: '', title: '', type: settings.categories[0] || '就醫', repeatDays: '' });
     setEditingId(null);
     setShowFormModal(false);
   };
 
   const handleEdit = (ev) => {
-    setForm({ date: ev.date, title: ev.title, type: ev.type });
-    setEditingId(ev.id);
+    // 確保我們總是編輯原始事件，而不是重複產生的虛擬事件
+    const originalEvent = events.find(e => e.id === ev.id);
+    if (!originalEvent) return;
+    setForm({ 
+      date: originalEvent.date, 
+      title: originalEvent.title, 
+      type: originalEvent.type,
+      repeatDays: originalEvent.repeatDays || ''
+    });
+    setEditingId(originalEvent.id);
     setShowFormModal(true);
   };
 
@@ -85,9 +101,40 @@ const CalendarTab = () => {
   };
   
   const openNewForm = (dateStr = '') => {
-    setForm({ date: dateStr, title: '', type: settings.categories[0] || '就醫' });
+    setForm({ date: dateStr, title: '', type: settings.categories[0] || '就醫', repeatDays: '' });
     setEditingId(null);
     setShowFormModal(true);
+  };
+
+  // 處理重複事件，展開成多個虛擬事件
+  const getExpandedEvents = (rawEvents) => {
+    const expanded = [];
+    const endDate = new Date();
+    endDate.setFullYear(endDate.getFullYear() + 2); // 為了效能，只看未來兩年的重複事件
+
+    rawEvents.forEach(event => {
+      expanded.push(event); // 先加入原始事件
+
+      if (event.repeatDays && event.repeatDays > 0) {
+        let currentDate = new Date(event.date + 'T00:00:00');
+        currentDate.setDate(currentDate.getDate() + event.repeatDays);
+
+        while (currentDate <= endDate) {
+          const yyyy = currentDate.getFullYear();
+          const mm = String(currentDate.getMonth() + 1).padStart(2, '0');
+          const dd = String(currentDate.getDate()).padStart(2, '0');
+          const newDateStr = `${yyyy}-${mm}-${dd}`;
+
+          expanded.push({
+            ...event,
+            date: newDateStr, // 這是此重複事件的日期
+            key: `${event.id}-${newDateStr}` // 給 React 用的唯一 key
+          });
+          currentDate.setDate(currentDate.getDate() + event.repeatDays);
+        }
+      }
+    });
+    return expanded;
   };
 
   const renderCalendar = () => {
@@ -97,12 +144,16 @@ const CalendarTab = () => {
     const blanks = Array.from({ length: firstDayIndex }, (_, i) => i);
     const days = Array.from({ length: daysInMonth }, (_, i) => i + 1);
     const weekDays = ['日', '一', '二', '三', '四', '五', '六'];
-    const todayStr = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(currentDate.getDate()).padStart(2, '0')}`;
+    const allVisibleEvents = getExpandedEvents(events);
 
     return (
       <div className="card">
         <div className="calendar-title-bar">
-          <h3 style={{margin: 0}}>{currentYear} 年 {currentMonth + 1} 月</h3>
+          <div style={{display: 'flex', alignItems: 'center', gap: '15px'}}>
+            <button className="btn-icon" onClick={handlePrevMonth}><ChevronLeft size={24} /></button>
+            <h3 style={{margin: 0, cursor: 'pointer', minWidth: '120px', textAlign: 'center'}} onClick={handleToday} title="回到今天">{currentYear} 年 {currentMonth + 1} 月</h3>
+            <button className="btn-icon" onClick={handleNextMonth}><ChevronRight size={24} /></button>
+          </div>
           <button className="btn-primary" style={{width: 'auto', padding: '8px 12px'}} onClick={() => openNewForm()}>
             <Plus size={18} /> 新增
           </button>
@@ -112,13 +163,15 @@ const CalendarTab = () => {
           {blanks.map(b => <div key={`blank-${b}`} className="calendar-cell empty" />)}
           {days.map(d => {
             const dateStr = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-            const dayEvents = events.filter(ev => ev.date === dateStr);
+            const dayEvents = allVisibleEvents.filter(ev => ev.date === dateStr);
             const isToday = dateStr === todayStr;
+            const isPast = dateStr < todayStr;
+            const isFuture = dateStr > todayStr;
             return (
-              <div key={d} className={`calendar-cell ${dayEvents.length > 0 ? 'has-event' : ''} ${isToday ? 'today' : ''}`} onClick={() => openNewForm(dateStr)}>
+              <div key={d} className={`calendar-cell ${dayEvents.length > 0 ? 'has-event' : ''} ${isToday ? 'today' : ''} ${isPast ? 'past' : ''} ${isFuture ? 'future' : ''}`} onClick={() => !isPast && openNewForm(dateStr)}>
                 <span style={{fontWeight: isToday ? 'bold' : 'normal'}}>{d}</span>
                 <div style={{width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center'}}>
-                  {dayEvents.map(ev => <div key={ev.id} className="event-pill" title={ev.title}>{ev.title}</div>)}
+                  {dayEvents.slice(0, 2).map(ev => <div key={ev.key || ev.id} className="event-pill" title={ev.title}>{ev.title}</div>)}
                 </div>
               </div>
             );
@@ -127,10 +180,25 @@ const CalendarTab = () => {
       </div>
     );
   };
+  
+  const allVisibleEvents = getExpandedEvents(events);
 
-  const displayedEvents = events
-    .filter(ev => viewMode === 'all' || ev.date.startsWith(`${currentYear}-${String(currentMonth + 1).padStart(2, '0')}`))
-    .sort((a,b) => new Date(a.date) - new Date(b.date));
+  let displayedEvents = allVisibleEvents.sort((a,b) => new Date(a.date) - new Date(b.date));
+
+  if (viewMode === 'all') {
+    const seenRepeating = new Set();
+    displayedEvents = displayedEvents.filter(ev => {
+      if (ev.repeatDays && ev.repeatDays > 0) {
+        if (ev.date < todayStr) return false; // 隱藏過去的重複行程
+        if (seenRepeating.has(ev.id)) return false; // 只保留未來的第一次，後續不再顯示
+        seenRepeating.add(ev.id);
+      }
+      return true;
+    });
+  } else {
+    const monthPrefix = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}`;
+    displayedEvents = displayedEvents.filter(ev => ev.date.startsWith(monthPrefix));
+  }
 
   return (
     <div>
@@ -143,7 +211,7 @@ const CalendarTab = () => {
       </div>
 
       {displayedEvents.map(ev => (
-        <div className="card flex-between" key={ev.id}>
+        <div className="card flex-between" key={ev.key || ev.id}>
           <div>
             <span className="tag">{ev.type}</span>
             <strong>{ev.date}</strong> - {ev.title}
@@ -189,6 +257,10 @@ const CalendarTab = () => {
             <label>詳細事項</label>
             <input type="text" placeholder="例如：打狂犬病疫苗" value={form.title} onChange={e => setForm({...form, title: e.target.value})} />
           </div>
+          <div className="input-group">
+            <label>重複週期 (天)</label>
+            <input type="number" placeholder="例如: 7 (每週重複), 留空為不重複" value={form.repeatDays} onChange={e => setForm({...form, repeatDays: e.target.value})} />
+          </div>
           <button className="btn-primary" onClick={handleSave} style={{marginTop: '20px'}}>
             <Plus size={20} /> {editingId ? '儲存修改' : '新增排程'}
           </button>
@@ -221,17 +293,57 @@ const DietTab = () => {
   const [settings, setSettings] = useState({ categories: [], brands: [] });
   const [showFormModal, setShowFormModal] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
-  const [form, setForm] = useState({ category: '飼料', brand: '', duration: '', dosage: '', frequency: '' });
+  const [form, setForm] = useState({ category: '飼料', brand: '', date: '', dosage: '', frequency: '' });
   const [editingId, setEditingId] = useState(null);
   const [filter, setFilter] = useState('全部');
   const [newSetting, setNewSetting] = useState({ type: 'brands', value: '' });
 
   useEffect(() => { 
-    api.getLogs().then(setLogs); 
-    api.getDietSettings().then(res => {
-      setSettings(res);
-      setForm(prev => ({...prev, category: res.categories[0] || '飼料'}));
-    });
+    const loadAndSync = async () => {
+      try {
+        const fetchedEvents = await api.getEvents();
+        let fetchedLogs = await api.getLogs();
+
+        const today = new Date();
+        const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+        let needRefresh = false;
+
+        for (const event of fetchedEvents) {
+          if (event.type !== '驅蟲藥') continue;
+
+          let currentDate = new Date(event.date + 'T00:00:00');
+          const repeatDays = parseInt(event.repeatDays) || 0;
+          const endDate = new Date(todayStr + 'T00:00:00');
+
+          if (currentDate <= endDate) {
+            while (currentDate <= endDate) {
+              const yyyy = currentDate.getFullYear();
+              const mm = String(currentDate.getMonth() + 1).padStart(2, '0');
+              const dd = String(currentDate.getDate()).padStart(2, '0');
+              const dateStr = `${yyyy}-${mm}-${dd}`;
+              const logExists = fetchedLogs.find(l => l.category === '用藥' && l.brand === event.title && l.date === dateStr);
+
+              if (!logExists) {
+                const frequencyStr = repeatDays > 0 ? `每 ${repeatDays} 天` : '根據醫囑';
+                await api.addLog({ category: '用藥', brand: event.title, date: dateStr, dosage: '1 劑', frequency: frequencyStr });
+                needRefresh = true;
+              }
+
+              if (repeatDays <= 0) break;
+              currentDate.setDate(currentDate.getDate() + repeatDays);
+            }
+          }
+        }
+
+        if (needRefresh) fetchedLogs = await api.getLogs();
+        setLogs(fetchedLogs);
+
+        const res = await api.getDietSettings();
+        setSettings(res);
+        setForm(prev => ({...prev, category: res.categories[0] || '飼料'}));
+      } catch (e) { console.error("Sync error:", e); }
+    };
+    loadAndSync();
   }, []);
 
   const handleSave = async () => {
@@ -242,13 +354,13 @@ const DietTab = () => {
       await api.addLog(form);
     }
     setLogs(await api.getLogs());
-    setForm({ category: settings.categories[0] || '飼料', brand: '', duration: '', dosage: '', frequency: '' });
+    setForm({ category: settings.categories[0] || '飼料', brand: '', date: '', dosage: '', frequency: '' });
     setEditingId(null);
     setShowFormModal(false);
   };
 
   const handleEdit = (log) => {
-    setForm({ category: log.category || '飼料', brand: log.brand, duration: log.duration, dosage: log.dosage, frequency: log.frequency });
+    setForm({ category: log.category || '飼料', brand: log.brand, date: log.date || '', dosage: log.dosage, frequency: log.frequency });
     setEditingId(log.id);
     setShowFormModal(true);
   };
@@ -275,7 +387,7 @@ const DietTab = () => {
   };
   
   const openNewForm = () => {
-    setForm({ category: settings.categories[0] || '飼料', brand: '', duration: '', dosage: '', frequency: '' });
+    setForm({ category: settings.categories[0] || '飼料', brand: '', date: '', dosage: '', frequency: '' });
     setEditingId(null);
     setShowFormModal(true);
   };
@@ -311,9 +423,9 @@ const DietTab = () => {
               <button className="btn-icon" onClick={() => handleDelete(log.id)}><Trash2 size={18}/></button>
             </div>
           </div>
-          <p style={{margin: '5px 0', color: 'var(--text-light)'}}>期間：{log.duration}</p>
-          <p style={{margin: '5px 0', color: 'var(--text-light)'}}>用量：{log.dosage}</p>
-          <p style={{margin: '5px 0', color: 'var(--text-light)'}}>頻率：{log.frequency}</p>
+          {log.date && <p style={{margin: '5px 0', color: 'var(--text-light)'}}>日期：{log.date}</p>}
+          {log.dosage && <p style={{margin: '5px 0', color: 'var(--text-light)'}}>用量：{log.dosage}</p>}
+          {log.frequency && <p style={{margin: '5px 0', color: 'var(--text-light)'}}>頻率：{log.frequency}</p>}
         </div>
       ))}
 
@@ -333,8 +445,22 @@ const DietTab = () => {
             </datalist>
           </div>
           <div className="input-group">
-            <label>吃多久 (期間)</label>
-            <input type="text" placeholder="例：2023/10 - 至今" value={form.duration} onChange={e => setForm({...form, duration: e.target.value})} />
+            <label>使用日期</label>
+            <DatePicker
+              selected={form.date ? new Date(form.date + 'T00:00:00') : null}
+              onChange={date => {
+                if (date) {
+                  const yyyy = date.getFullYear();
+                  const mm = String(date.getMonth() + 1).padStart(2, '0');
+                  const dd = String(date.getDate()).padStart(2, '0');
+                  setForm({...form, date: `${yyyy}-${mm}-${dd}`});
+                } else {
+                  setForm({...form, date: ''});
+                }
+              }}
+              dateFormat="yyyy-MM-dd"
+              placeholderText="請選擇日期"
+            />
           </div>
           <div className="input-group">
             <label>用量多少</label>
@@ -752,7 +878,7 @@ const BloodTestTab = () => {
                 <Tooltip />
                 <Legend />
                 {selectedMetrics.map((metric, idx) => (
-                  <Line key={metric} type="monotone" dataKey={metric} stroke={lineColors[idx % lineColors.length]} strokeWidth={3} />
+                  <Line key={metric} type="monotone" dataKey={metric} stroke={lineColors[idx % lineColors.length]} strokeWidth={3} connectNulls />
                 ))}
               </LineChart>
             </ResponsiveContainer>

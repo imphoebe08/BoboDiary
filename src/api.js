@@ -18,11 +18,12 @@ const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const auth = getAuth(app);
 
-// 取得當前登入使用者的 UID (所有資料都會存在各自的 UID 底下確保安全)
+// 取得共用資料庫的 ID (確保有登入即可，家人共用同一個資料庫)
 const getUid = () => {
   const user = auth.currentUser;
   if (!user) throw new Error("請先登入");
-  return user.uid;
+  // 改為回傳固定的名稱，讓所有登入的家人都讀寫同一個資料夾
+  return "shared_family_database";
 };
 
 export const api = {

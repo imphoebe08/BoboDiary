@@ -270,19 +270,33 @@ h3 {
 
 .calendar-cell {
   aspect-ratio: 1 / 1;
+  min-height: 85px;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: flex-start;
-  padding: 5px;
+  padding: 4px;
   border-radius: 8px;
-  background-color: #FAFAFA;
   font-size: 0.9rem;
   border: 1px solid #EEE;
+  overflow: hidden;
+}
+
+.calendar-cell.today > span {
+  font-weight: bold;
+  background-color: var(--primary-yellow);
+  color: white;
+  border-radius: 50%;
+  width: 24px;
+  height: 24px;
+  line-height: 24px;
+}
+
+.calendar-cell.today {
+  background-color: #FFE4E1; /* 淡粉紅色 */
 }
 
 .calendar-cell.has-event {
-  background-color: #FFF3E0;
   border-color: var(--primary-yellow);
 }
 
@@ -291,12 +305,27 @@ h3 {
   border: none;
 }
 
-.event-dot {
-  width: 6px;
-  height: 6px;
-  background-color: var(--primary-orange);
-  border-radius: 50%;
-  margin-top: 4px;
+.calendar-cell.past {
+  background-color: #F5F5F5; /* 灰色 */
+  color: #A0A0A0;
+  cursor: default;
+}
+
+.calendar-cell.future {
+  background-color: #FFF3E0; /* 淺橘色 */
+}
+
+.event-pill {
+  font-size: 0.75rem;
+  padding: 2px 4px;
+  border-radius: 4px;
+  background-color: var(--primary-green);
+  color: white;
+  width: 90%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-top: 2px;
 }
 
 .tag {
@@ -335,7 +364,7 @@ h3 {
   border-radius: 16px;
   padding: 25px;
   width: 100%;
-  max-width: 450px;
+  max-width: 550px;
   max-height: 85vh;
   overflow-y: auto;
   box-shadow: 0 10px 25px rgba(0,0,0,0.2);
