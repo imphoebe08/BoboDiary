@@ -5,6 +5,8 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { Calendar as CalendarIcon, Utensils, Activity, Syringe, Plus, Trash2, Edit2, Settings, BookHeart, X, LogOut, ChevronLeft, ChevronRight } from 'lucide-react';
 import './bobo-theme.css';
 import { api } from './api';
+// 因為照片放在 public 資料夾，我們加上 ../ 去上一層抓取
+import boboImg from '../public/bobo.jpg'; 
 
 // 通用彈跳視窗元件
 const Modal = ({ title, onClose, children }) => (
@@ -995,7 +997,8 @@ const AuthScreen = () => {
   return (
     <div className="auth-container">
       <div className="auth-card">
-        <h1><BookHeart size={32} /> 波皇子的健保手冊</h1>
+        <img src={boboImg} alt="Bobo" className="bobo-avatar-large" />
+        <h1 style={{marginTop: '10px'}} >波皇子的健保手冊</h1>
         <h3 style={{marginTop: 0, marginBottom: '20px'}}>登入您的帳號</h3>
         {error && <div className="auth-error">{error}</div>}
         <form onSubmit={handleSubmit} className="input-group">
@@ -1032,7 +1035,7 @@ export default function App() {
     <div className="app-container">
       {/* 手機版 Header */}
       <header className="app-header">
-        <BookHeart size={24} /> 波皇子的健保手冊
+        <img src={boboImg} alt="Bobo" className="bobo-avatar" style={{width: 28, height: 28}} /> 波皇子的健保手冊
         <button className="btn-icon" style={{color: 'white', marginLeft: 'auto'}} onClick={() => api.auth.logout()} title="登出">
           <LogOut size={22} />
         </button>
@@ -1041,7 +1044,7 @@ export default function App() {
       {/* 左側邊欄 (電腦版顯示) */}
       <nav className="bottom-nav">
         <div className="app-header" style={{display: 'none', background: 'transparent', color: 'var(--primary-orange)', marginBottom: '20px'}}>
-           <BookHeart size={28} /> <strong>波皇子的健保手冊</strong>
+           <img src={boboImg} alt="Bobo" className="bobo-avatar" /> <strong>波皇子的健保手冊</strong>
         </div>
         <button className={`nav-btn ${activeTab === 0 ? 'active' : ''}`} onClick={() => setActiveTab(0)}>
           <CalendarIcon size={24} /> <span>行事曆</span>

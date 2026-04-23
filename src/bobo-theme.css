@@ -546,3 +546,21 @@ h3 {
     width: 95%;
   }
 }
+
+/* 波波專屬大頭貼 */
+.bobo-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid rgba(255, 255, 255, 0.8);
+}
+
+.bobo-avatar-large {
+  width: 85px;
+  height: 85px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 3px solid white;
+  box-shadow: 0 5px 15px rgba(90, 80, 70, 0.2);
+}
