@@ -56,9 +56,39 @@ const CalendarTab = () => {
   const handleSave = async () => {
     if (!form.date || !form.title) return;
     const eventData = { ...form, repeatDays: parseInt(form.repeatDays) || 0 };
+
     if (editingId) {
+      // 1. 編輯：先更新原本的資料庫
       await api.updateEvent(editingId, eventData);
+      
+      // 2. 同步編輯到 Notion (檢查此事件是否有綁定 Notion ID)
+      const originalEvent = events.find(e => e.id === editingId);
+      if (originalEvent && originalEvent.notionPageId) {
+        try {
+          await fetch(`/api/events/${originalEvent.notionPageId}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ title: form.title, date: form.date })
+          });
+        } catch (error) {
+          console.error('Notion 編輯同步失敗:', error);
+        }
+      }
     } else {
+      // 1. 新增：先同步到 Notion 以取得專屬的 Page ID
+      try {
+        const notionRes = await fetch('/api/events', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ title: form.title, date: form.date })
+        });
+        const notionData = await notionRes.json();
+        if (notionData.id) eventData.notionPageId = notionData.id; // 將 Notion ID 記下來
+      } catch (error) {
+        console.error('Notion 新增同步失敗:', error);
+      }
+
+      // 2. 將包含 Notion ID 的資料存入原本的資料庫
       await api.addEvent(eventData);
     }
     setEvents(await api.getEvents());
@@ -82,6 +112,16 @@ const CalendarTab = () => {
   };
 
   const handleDelete = async (id) => {
+    // 刪除：同步刪除 Notion 上的事件
+    const ev = events.find(e => e.id === id);
+    if (ev && ev.notionPageId) {
+      try {
+        await fetch(`/api/events/${ev.notionPageId}`, { method: 'DELETE' });
+      } catch (error) {
+        console.error('Notion 刪除同步失敗:', error);
+      }
+    }
+
     await api.deleteEvent(id);
     setEvents(await api.getEvents());
   };
