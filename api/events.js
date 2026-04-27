@@ -27,7 +27,7 @@ export default async function handler(req, res) {
   try {
     // 新增行程
     if (method === 'POST') {
-      const { title, date } = req.body;
+      const { title, date, endDate } = req.body;
       if (!title || !date) {
         return res.status(400).json({ error: 'Title and date are required.' });
       }
@@ -36,7 +36,10 @@ export default async function handler(req, res) {
         parent: { database_id: databaseId },
         properties: {
           'Name': { title: [{ text: { content: title } }] },
-          'Date': { date: { start: date } },
+          'Date': { date: {
+            start: date,
+            end: endDate || null
+          } },
         },
       });
       return res.status(201).json(response);
@@ -45,10 +48,13 @@ export default async function handler(req, res) {
     // 編輯行程
     if (method === 'PATCH') {
       const { page_id } = req.query; // 改由 query 字串接收 ID
-      const { title, date } = req.body || {};
+      const { title, date, endDate } = req.body || {};
       const properties = {};
       if (title) properties['Name'] = { title: [{ text: { content: title } }] };
-      if (date) properties['Date'] = { date: { start: date } };
+      if (date) properties['Date'] = { date: {
+        start: date,
+        end: endDate || null
+      } };
       const response = await notion.pages.update({ page_id, properties });
       return res.status(200).json(response);
     }

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Bar } from 'recharts';
 import { Calendar as CalendarIcon, Utensils, Activity, Syringe, Plus, Trash2, Edit2, Settings, BookHeart, X, LogOut, ChevronLeft, ChevronRight } from 'lucide-react';
 import './bobo-theme.css';
 import { api } from './api';
@@ -21,6 +21,34 @@ const Modal = ({ title, onClose, children }) => (
   </div>
 );
 
+// 年月選擇彈窗
+const MonthYearPicker = ({ currentDate, onDateChange, onClose }) => {
+  const [year, setYear] = useState(currentDate.getFullYear());
+  const [month, setMonth] = useState(currentDate.getMonth());
+
+  const years = Array.from({ length: 11 }, (_, i) => new Date().getFullYear() - 5 + i);
+  const monthNames = Array.from({ length: 12 }, (_, i) => `${i + 1}月`);
+
+  const handleConfirm = () => {
+      onDateChange(new Date(year, month, 1));
+      onClose();
+  };
+
+  return (
+      <Modal title="選擇年月" onClose={onClose}>
+          <div style={{ display: 'flex', justifyContent: 'center', gap: '20px', padding: '20px 0' }}>
+              <select value={year} onChange={e => setYear(Number(e.target.value))} className="input-style">
+                  {years.map(y => <option key={y} value={y}>{y}年</option>)}
+              </select>
+              <select value={month} onChange={e => setMonth(Number(e.target.value))} className="input-style">
+                  {monthNames.map((m, i) => <option key={i} value={i}>{m}</option>)}
+              </select>
+          </div>
+          <button className="btn-primary" onClick={handleConfirm}>確定</button>
+      </Modal>
+  );
+};
+
 // ==============================
 // 1. 行事曆介面 (Calendar Tab)
 // ==============================
@@ -29,7 +57,7 @@ const CalendarTab = () => {
   const [settings, setSettings] = useState({ categories: [] });
   const [showFormModal, setShowFormModal] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
-  const [form, setForm] = useState({ date: '', title: '', type: '就醫', repeatDays: '' });
+  const [form, setForm] = useState({ date: '', title: '', type: '就醫', repeatDays: '', startTimeHour: '', startTimeMinute: '', isDateRange: false, endDate: '', endTimeHour: '', endTimeMinute: '' });
   const [editingId, setEditingId] = useState(null);
   const [viewMode, setViewMode] = useState('month'); // 'month' or 'all'
   const [newCat, setNewCat] = useState('');
@@ -39,6 +67,7 @@ const CalendarTab = () => {
   const currentMonth = viewDate.getMonth(); // 0-11
 
   const todayObj = new Date();
+  // 修正 todayStr 的格式，確保月份和日期總是兩位數
   const todayStr = `${todayObj.getFullYear()}-${String(todayObj.getMonth() + 1).padStart(2, '0')}-${String(todayObj.getDate()).padStart(2, '0')}`;
 
   const handlePrevMonth = () => setViewDate(new Date(currentYear, currentMonth - 1, 1));
@@ -53,9 +82,35 @@ const CalendarTab = () => {
     });
   }, []);
 
+  const [showPastEvents, setShowPastEvents] = useState(false);
+  const [showMonthYearPicker, setShowMonthYearPicker] = useState(false);
+
+  const hours = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, '0'));
+  const minutes = ['00', '15', '30', '45'];
+
   const handleSave = async () => {
     if (!form.date || !form.title) return;
-    const eventData = { ...form, repeatDays: parseInt(form.repeatDays) || 0 };
+
+    let startDateTime = form.date;
+    if (form.startTimeHour && form.startTimeMinute) {
+      startDateTime += `T${form.startTimeHour}:${form.startTimeMinute}:00`;
+    }
+
+    let endDateTime = null;
+    if (form.isDateRange && form.endDate) {
+      endDateTime = form.endDate;
+      if (form.endTimeHour && form.endTimeMinute) {
+        endDateTime += `T${form.endTimeHour}:${form.endTimeMinute}:00`;
+      }
+    }
+
+    if (endDateTime && new Date(endDateTime) < new Date(startDateTime)) {
+      alert('結束時間不得小於開始時間');
+      return;
+    }
+
+    const eventData = { ...form, date: startDateTime, endDate: endDateTime, repeatDays: parseInt(form.repeatDays) || 0 };
+    const notionPayload = { title: form.title, date: startDateTime, endDate: endDateTime };
 
     if (editingId) {
       // 1. 編輯：先更新原本的資料庫
@@ -68,7 +123,7 @@ const CalendarTab = () => {
           await fetch(`/api/events?page_id=${originalEvent.notionPageId}`, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ title: form.title, date: form.date })
+            body: JSON.stringify(notionPayload)
           });
         } catch (error) {
           console.error('Notion 編輯同步失敗:', error);
@@ -80,7 +135,7 @@ const CalendarTab = () => {
         const notionRes = await fetch('/api/events', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ title: form.title, date: form.date })
+          body: JSON.stringify(notionPayload)
         });
         if (notionRes.ok) {
           const notionData = await notionRes.json();
@@ -96,7 +151,7 @@ const CalendarTab = () => {
       await api.addEvent(eventData);
     }
     setEvents(await api.getEvents());
-    setForm({ date: '', title: '', type: settings.categories[0] || '就醫', repeatDays: '' });
+    setForm({ date: '', title: '', type: settings.categories[0] || '就醫', repeatDays: '', startTimeHour: '', startTimeMinute: '', isDateRange: false, endDate: '', endTimeHour: '', endTimeMinute: '' });
     setEditingId(null);
     setShowFormModal(false);
   };
@@ -105,11 +160,24 @@ const CalendarTab = () => {
     // 確保我們總是編輯原始事件，而不是重複產生的虛擬事件
     const originalEvent = events.find(e => e.id === ev.id);
     if (!originalEvent) return;
+
+    const [startDatePart, startTimePart] = (originalEvent.date || '').split('T');
+    const [startHour, startMinute] = startTimePart ? startTimePart.split(':') : ['', ''];
+
+    const [endDatePart, endTimePart] = (originalEvent.endDate || '').split('T');
+    const [endHour, endMinute] = endTimePart ? endTimePart.split(':') : ['', ''];
+
     setForm({ 
-      date: originalEvent.date, 
+      date: startDatePart, 
       title: originalEvent.title, 
       type: originalEvent.type,
-      repeatDays: originalEvent.repeatDays || ''
+      repeatDays: originalEvent.repeatDays || '',
+      isDateRange: !!originalEvent.isDateRange,
+      startTimeHour: startHour,
+      startTimeMinute: startMinute,
+      endDate: endDatePart || '',
+      endTimeHour: endHour,
+      endTimeMinute: endMinute,
     });
     setEditingId(originalEvent.id);
     setShowFormModal(true);
@@ -147,7 +215,7 @@ const CalendarTab = () => {
   };
   
   const openNewForm = (dateStr = '') => {
-    setForm({ date: dateStr, title: '', type: settings.categories[0] || '就醫', repeatDays: '' });
+    setForm({ date: dateStr, title: '', type: settings.categories[0] || '就醫', repeatDays: '', startTimeHour: '', startTimeMinute: '', isDateRange: false, endDate: '', endTimeHour: '', endTimeMinute: '' });
     setEditingId(null);
     setShowFormModal(true);
   };
@@ -159,7 +227,10 @@ const CalendarTab = () => {
     endDate.setFullYear(endDate.getFullYear() + 2); // 為了效能，只看未來兩年的重複事件
 
     rawEvents.forEach(event => {
-      expanded.push(event); // 先加入原始事件
+      expanded.push({
+        ...event,
+        date: event.date.split('T')[0] // 確保 date 只有 YYYY-MM-DD
+      }); // 先加入原始事件
 
       if (event.repeatDays && event.repeatDays > 0) {
         let currentDate = new Date(event.date + 'T00:00:00');
@@ -197,8 +268,9 @@ const CalendarTab = () => {
         <div className="calendar-title-bar">
           <div className="calendar-month-switcher">
             <button className="btn-icon" onClick={handlePrevMonth}><ChevronLeft size={24} /></button>
-            <h3 onClick={handleToday} title="回到今天">{currentYear} 年 {currentMonth + 1} 月</h3>
+            <h3 onClick={() => setShowMonthYearPicker(true)} title="選擇年月" style={{cursor: 'pointer', textAlign: 'center', flex: 1}}>{currentYear} 年 {currentMonth + 1} 月</h3>
             <button className="btn-icon" onClick={handleNextMonth}><ChevronRight size={24} /></button>
+            <button className="btn-secondary" onClick={handleToday} style={{marginLeft: '10px', padding: '0 10px'}}>今天</button>
           </div>
           <button className="btn-primary" style={{width: 'auto', padding: '8px 12px'}} onClick={() => openNewForm()}>
             <Plus size={18} /> 新增
@@ -213,7 +285,7 @@ const CalendarTab = () => {
             const isToday = dateStr === todayStr;
             const isPast = dateStr < todayStr;
             const isFuture = dateStr > todayStr;
-            return (
+            return ( // 已過期的日期，點擊時不再跳出新增表單
               <div key={d} className={`calendar-cell ${dayEvents.length > 0 ? 'has-event' : ''} ${isToday ? 'today' : ''} ${isPast ? 'past' : ''} ${isFuture ? 'future' : ''}`} onClick={() => !isPast && openNewForm(dateStr)}>
                 <span style={{fontWeight: isToday ? 'bold' : 'normal'}}>{d}</span>
                 <div style={{width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center'}}>
@@ -229,9 +301,10 @@ const CalendarTab = () => {
   
   const allVisibleEvents = getExpandedEvents(events);
 
-  let displayedEvents = allVisibleEvents.sort((a,b) => new Date(a.date) - new Date(b.date));
+  let eventsForList = allVisibleEvents.sort((a,b) => new Date(a.date) - new Date(b.date));
 
   if (viewMode === 'all') {
+    // 在「全部行程」模式下，過期的重複事件不顯示，且只顯示未來最近的一次
     const seenRepeating = new Set();
     displayedEvents = displayedEvents.filter(ev => {
       if (ev.repeatDays && ev.repeatDays > 0) {
@@ -242,22 +315,31 @@ const CalendarTab = () => {
       return true;
     });
   } else {
+    // 在「本月行程」模式下
     const monthPrefix = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}`;
-    displayedEvents = displayedEvents.filter(ev => ev.date.startsWith(monthPrefix));
+    eventsForList = eventsForList.filter(ev => ev.date.startsWith(monthPrefix));
+    if (!showPastEvents) {
+      eventsForList = eventsForList.filter(ev => ev.date >= todayStr);
+    }
   }
 
   return (
     <div>
       <h2><CalendarIcon /> 行事曆</h2>
       {renderCalendar()}
-
-      <div className="btn-group">
-        <button className={`btn-secondary ${viewMode === 'month' ? 'active' : ''}`} onClick={() => setViewMode('month')}>本月行程</button>
-        <button className={`btn-secondary ${viewMode === 'all' ? 'active' : ''}`} onClick={() => setViewMode('all')}>全部行程</button>
+      
+      <div className="flex-between" style={{ margin: '20px 0 10px 0' }}>
+        <div className="btn-group">
+          <button className={`btn-secondary ${viewMode === 'month' ? 'active' : ''}`} onClick={() => setViewMode('month')}>本月行程</button>
+          <button className={`btn-secondary ${viewMode === 'all' ? 'active' : ''}`} onClick={() => setViewMode('all')}>全部行程</button>
+        </div>
+        {viewMode === 'month' && (
+          <label className="checkbox-label" style={{marginLeft: 'auto'}}><input type="checkbox" checked={showPastEvents} onChange={e => setShowPastEvents(e.target.checked)} /> 顯示過期事件</label>
+        )}
       </div>
 
-      {displayedEvents.map(ev => (
-        <div className="card flex-between" key={ev.key || ev.id}>
+      {eventsForList.map(ev => (
+        <div className={`card flex-between ${ev.date < todayStr ? 'past-event-card' : ''}`} key={ev.key || ev.id}>
           <div>
             <span className="tag">{ev.type}</span>
             <strong>{ev.date}</strong> - {ev.title}
@@ -271,23 +353,55 @@ const CalendarTab = () => {
 
       {showFormModal && (
         <Modal title={editingId ? '編輯排程' : '新增排程'} onClose={() => setShowFormModal(false)}>
+          <div style={{display: 'flex', gap: '10px', alignItems: 'flex-end'}}>
+            <div className="input-group" style={{flex: 1}}>
+              <label>開始日期</label>
+              <DatePicker selected={form.date ? new Date(form.date + 'T00:00:00') : null} onChange={date => setForm({...form, date: date ? date.toISOString().split('T')[0] : ''})} dateFormat="yyyy-MM-dd" placeholderText="請選擇日期" />
+            </div>
+            <div className="input-group" style={{flex: '0 0 70px'}}>
+              <label>時</label>
+              <select value={form.startTimeHour} onChange={e => setForm({...form, startTimeHour: e.target.value})}>
+                <option value="">--</option>
+                {hours.map(h => <option key={h} value={h}>{h}</option>)}
+              </select>
+            </div>
+            <div className="input-group" style={{flex: '0 0 70px'}}>
+              <label>分</label>
+              <select value={form.startTimeMinute} onChange={e => setForm({...form, startTimeMinute: e.target.value})}>
+                <option value="">--</option>
+                {minutes.map(m => <option key={m} value={m}>{m}</option>)}
+              </select>
+            </div>
+          </div>
           <div className="input-group">
-            <label>日期</label>
-            <DatePicker
-              selected={form.date ? new Date(form.date + 'T00:00:00') : null}
-              onChange={date => {
-                if (date) {
-                  const yyyy = date.getFullYear();
-                  const mm = String(date.getMonth() + 1).padStart(2, '0');
-                  const dd = String(date.getDate()).padStart(2, '0');
-                  setForm({...form, date: `${yyyy}-${mm}-${dd}`});
-                } else {
-                  setForm({...form, date: ''});
-                }
-              }}
-              dateFormat="yyyy-MM-dd"
-              placeholderText="請選擇日期"
-            />
+            <label className="checkbox-label">
+              <input type="checkbox" checked={form.isDateRange} onChange={e => setForm({...form, isDateRange: e.target.checked})} />
+              設定起迄時間
+            </label>
+          </div>
+          {form.isDateRange && (
+            <div style={{display: 'flex', gap: '10px', alignItems: 'flex-end'}}>
+              <div className="input-group" style={{flex: 1}}>
+                <label>結束日期</label>
+                <DatePicker selected={form.endDate ? new Date(form.endDate + 'T00:00:00') : null} onChange={date => setForm({...form, endDate: date ? date.toISOString().split('T')[0] : ''})} dateFormat="yyyy-MM-dd" placeholderText="請選擇日期" />
+              </div>
+              <div className="input-group" style={{flex: '0 0 70px'}}>
+                <label>時</label>
+                <select value={form.endTimeHour} onChange={e => setForm({...form, endTimeHour: e.target.value})}>
+                  <option value="">--</option>
+                  {hours.map(h => <option key={h} value={h}>{h}</option>)}
+                </select>
+              </div>
+              <div className="input-group" style={{flex: '0 0 70px'}}>
+                <label>分</label>
+                <select value={form.endTimeMinute} onChange={e => setForm({...form, endTimeMinute: e.target.value})}>
+                  <option value="">--</option>
+                  {minutes.map(m => <option key={m} value={m}>{m}</option>)}
+                </select>
+              </div>
+            </div>
+          )}
+          <div className="input-group">
           </div>
           <div className="input-group">
             <label style={{display: 'flex', justifyContent: 'space-between'}}>
@@ -311,6 +425,10 @@ const CalendarTab = () => {
             <Plus size={20} /> {editingId ? '儲存修改' : '新增排程'}
           </button>
         </Modal>
+      )}
+
+      {showMonthYearPicker && (
+        <MonthYearPicker currentDate={viewDate} onDateChange={setViewDate} onClose={() => setShowMonthYearPicker(false)} />
       )}
 
       {showSettingsModal && (
