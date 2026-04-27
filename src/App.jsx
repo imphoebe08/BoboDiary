@@ -57,7 +57,7 @@ const CalendarTab = () => {
   const [settings, setSettings] = useState({ categories: [] });
   const [showFormModal, setShowFormModal] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
-  const [form, setForm] = useState({ date: '', title: '', type: '就醫', repeatDays: '', startTimeHour: '', startTimeMinute: '', isDateRange: false, endDate: '', endTimeHour: '', endTimeMinute: '' });
+  const [form, setForm] = useState({ date: '', title: '', type: '就醫', repeatDays: '', startTime: '', isDateRange: false, endDate: '', endTime: '' });
   const [editingId, setEditingId] = useState(null);
   const [viewMode, setViewMode] = useState('month'); // 'month' or 'all'
   const [newCat, setNewCat] = useState('');
@@ -85,22 +85,19 @@ const CalendarTab = () => {
   const [showPastEvents, setShowPastEvents] = useState(false);
   const [showMonthYearPicker, setShowMonthYearPicker] = useState(false);
 
-  const hours = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, '0'));
-  const minutes = ['00', '15', '30', '45'];
-
   const handleSave = async () => {
     if (!form.date || !form.title) return;
 
     let startDateTime = form.date;
-    if (form.startTimeHour && form.startTimeMinute) {
-      startDateTime += `T${form.startTimeHour}:${form.startTimeMinute}:00`;
+    if (form.startTime) {
+      startDateTime += `T${form.startTime}:00`;
     }
 
     let endDateTime = null;
     if (form.isDateRange && form.endDate) {
       endDateTime = form.endDate;
-      if (form.endTimeHour && form.endTimeMinute) {
-        endDateTime += `T${form.endTimeHour}:${form.endTimeMinute}:00`;
+      if (form.endTime) {
+        endDateTime += `T${form.endTime}:00`;
       }
     }
 
@@ -151,7 +148,7 @@ const CalendarTab = () => {
       await api.addEvent(eventData);
     }
     setEvents(await api.getEvents());
-    setForm({ date: '', title: '', type: settings.categories[0] || '就醫', repeatDays: '', startTimeHour: '', startTimeMinute: '', isDateRange: false, endDate: '', endTimeHour: '', endTimeMinute: '' });
+    setForm({ date: '', title: '', type: settings.categories[0] || '就醫', repeatDays: '', startTime: '', isDateRange: false, endDate: '', endTime: '' });
     setEditingId(null);
     setShowFormModal(false);
   };
@@ -162,28 +159,27 @@ const CalendarTab = () => {
     if (!originalEvent) return;
 
     const [startDatePart, startTimePart] = (originalEvent.date || '').split('T');
-    const [startHour, startMinute] = startTimePart ? startTimePart.split(':') : ['', ''];
+    const startTime = startTimePart ? startTimePart.substring(0, 5) : '';
 
     const [endDatePart, endTimePart] = (originalEvent.endDate || '').split('T');
-    const [endHour, endMinute] = endTimePart ? endTimePart.split(':') : ['', ''];
+    const endTime = endTimePart ? endTimePart.substring(0, 5) : '';
 
     setForm({ 
       date: startDatePart, 
       title: originalEvent.title, 
       type: originalEvent.type,
       repeatDays: originalEvent.repeatDays || '',
-      isDateRange: !!originalEvent.isDateRange,
-      startTimeHour: startHour,
-      startTimeMinute: startMinute,
+      isDateRange: !!originalEvent.isDateRange || !!originalEvent.endDate,
+      startTime: startTime,
       endDate: endDatePart || '',
-      endTimeHour: endHour,
-      endTimeMinute: endMinute,
+      endTime: endTime,
     });
     setEditingId(originalEvent.id);
     setShowFormModal(true);
   };
 
   const handleDelete = async (id) => {
+    if (!window.confirm("確定要刪除這個行程嗎？")) return;
     // 刪除：同步刪除 Notion 上的事件
     const ev = events.find(e => e.id === id);
     if (ev && ev.notionPageId) {
@@ -196,6 +192,11 @@ const CalendarTab = () => {
 
     await api.deleteEvent(id);
     setEvents(await api.getEvents());
+    
+    if (editingId === id) {
+      setShowFormModal(false);
+      setEditingId(null);
+    }
   };
   
   const handleAddCat = async () => {
@@ -215,7 +216,7 @@ const CalendarTab = () => {
   };
   
   const openNewForm = (dateStr = '') => {
-    setForm({ date: dateStr, title: '', type: settings.categories[0] || '就醫', repeatDays: '', startTimeHour: '', startTimeMinute: '', isDateRange: false, endDate: '', endTimeHour: '', endTimeMinute: '' });
+    setForm({ date: dateStr, title: '', type: settings.categories[0] || '就醫', repeatDays: '', startTime: '', isDateRange: false, endDate: '', endTime: '' });
     setEditingId(null);
     setShowFormModal(true);
   };
@@ -227,13 +228,17 @@ const CalendarTab = () => {
     endDate.setFullYear(endDate.getFullYear() + 2); // 為了效能，只看未來兩年的重複事件
 
     rawEvents.forEach(event => {
+      const originalDateStr = event.date.split('T')[0];
+      const timePart = event.date.includes('T') ? 'T' + event.date.split('T')[1] : '';
+
       expanded.push({
         ...event,
-        date: event.date.split('T')[0] // 確保 date 只有 YYYY-MM-DD
+        date: originalDateStr,
+        timeStr: timePart ? timePart.substring(1, 6) : ''
       }); // 先加入原始事件
 
       if (event.repeatDays && event.repeatDays > 0) {
-        let currentDate = new Date(event.date + 'T00:00:00');
+        let currentDate = new Date(originalDateStr + 'T00:00:00');
         currentDate.setDate(currentDate.getDate() + event.repeatDays);
 
         while (currentDate <= endDate) {
@@ -245,6 +250,7 @@ const CalendarTab = () => {
           expanded.push({
             ...event,
             date: newDateStr, // 這是此重複事件的日期
+            timeStr: timePart ? timePart.substring(1, 6) : '',
             key: `${event.id}-${newDateStr}` // 給 React 用的唯一 key
           });
           currentDate.setDate(currentDate.getDate() + event.repeatDays);
@@ -289,7 +295,17 @@ const CalendarTab = () => {
               <div key={d} className={`calendar-cell ${dayEvents.length > 0 ? 'has-event' : ''} ${isToday ? 'today' : ''} ${isPast ? 'past' : ''} ${isFuture ? 'future' : ''}`} onClick={() => !isPast && openNewForm(dateStr)}>
                 <span style={{fontWeight: isToday ? 'bold' : 'normal'}}>{d}</span>
                 <div style={{width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center'}}>
-                  {dayEvents.slice(0, 2).map(ev => <div key={ev.key || ev.id} className="event-pill" title={ev.title}>{ev.title}</div>)}
+                  {dayEvents.slice(0, 2).map(ev => (
+                    <div 
+                      key={ev.key || ev.id} 
+                      className="event-pill" 
+                      style={{ opacity: isPast ? 0.6 : 1, backgroundColor: isPast ? '#A0A0A0' : 'var(--primary-green)', cursor: 'pointer' }} 
+                      title={ev.title}
+                      onClick={(e) => { e.stopPropagation(); handleEdit(ev); }}
+                    >
+                      {ev.timeStr ? `${ev.timeStr} ` : ''}{ev.title}
+                    </div>
+                  ))}
                 </div>
               </div>
             );
@@ -338,75 +354,27 @@ const CalendarTab = () => {
         )}
       </div>
 
-      {eventsForList.map(ev => (
-        <div className={`card flex-between ${ev.date < todayStr ? 'past-event-card' : ''}`} key={ev.key || ev.id}>
-          <div>
-            <span className="tag">{ev.type}</span>
-            <strong>{ev.date}</strong> - {ev.title}
+      {eventsForList.map(ev => {
+        const isPast = ev.date < todayStr;
+        return (
+        <div className={`card flex-between ${isPast ? 'past-event-card' : ''}`} key={ev.key || ev.id} style={isPast ? { opacity: 0.6, background: '#f5f5f5' } : {}}>
+          <div style={{ flex: 1 }}>
+            <span className="tag" style={isPast ? {backgroundColor: '#A0A0A0'} : {}}>{ev.type}</span>
+            <strong style={isPast ? {color: '#888'} : {}}>{ev.date} {ev.timeStr}</strong> - <span style={isPast ? {textDecoration: 'line-through', color: '#888'} : {}}>{ev.title}</span>
           </div>
           <div>
             <button className="btn-icon" onClick={() => handleEdit(ev)}><Edit2 size={18} /></button>
             <button className="btn-icon" onClick={() => handleDelete(ev.id)}><Trash2 size={18} /></button>
           </div>
         </div>
-      ))}
+      )})}
 
       {showFormModal && (
         <Modal title={editingId ? '編輯排程' : '新增排程'} onClose={() => setShowFormModal(false)}>
-          <div style={{display: 'flex', gap: '10px', alignItems: 'flex-end'}}>
-            <div className="input-group" style={{flex: 1}}>
-              <label>開始日期</label>
-              <DatePicker selected={form.date ? new Date(form.date + 'T00:00:00') : null} onChange={date => setForm({...form, date: date ? date.toISOString().split('T')[0] : ''})} dateFormat="yyyy-MM-dd" placeholderText="請選擇日期" />
-            </div>
-            <div className="input-group" style={{flex: '0 0 70px'}}>
-              <label>時</label>
-              <select value={form.startTimeHour} onChange={e => setForm({...form, startTimeHour: e.target.value})}>
-                <option value="">--</option>
-                {hours.map(h => <option key={h} value={h}>{h}</option>)}
-              </select>
-            </div>
-            <div className="input-group" style={{flex: '0 0 70px'}}>
-              <label>分</label>
-              <select value={form.startTimeMinute} onChange={e => setForm({...form, startTimeMinute: e.target.value})}>
-                <option value="">--</option>
-                {minutes.map(m => <option key={m} value={m}>{m}</option>)}
-              </select>
-            </div>
-          </div>
-          <div className="input-group">
-            <label className="checkbox-label">
-              <input type="checkbox" checked={form.isDateRange} onChange={e => setForm({...form, isDateRange: e.target.checked})} />
-              設定起迄時間
-            </label>
-          </div>
-          {form.isDateRange && (
-            <div style={{display: 'flex', gap: '10px', alignItems: 'flex-end'}}>
-              <div className="input-group" style={{flex: 1}}>
-                <label>結束日期</label>
-                <DatePicker selected={form.endDate ? new Date(form.endDate + 'T00:00:00') : null} onChange={date => setForm({...form, endDate: date ? date.toISOString().split('T')[0] : ''})} dateFormat="yyyy-MM-dd" placeholderText="請選擇日期" />
-              </div>
-              <div className="input-group" style={{flex: '0 0 70px'}}>
-                <label>時</label>
-                <select value={form.endTimeHour} onChange={e => setForm({...form, endTimeHour: e.target.value})}>
-                  <option value="">--</option>
-                  {hours.map(h => <option key={h} value={h}>{h}</option>)}
-                </select>
-              </div>
-              <div className="input-group" style={{flex: '0 0 70px'}}>
-                <label>分</label>
-                <select value={form.endTimeMinute} onChange={e => setForm({...form, endTimeMinute: e.target.value})}>
-                  <option value="">--</option>
-                  {minutes.map(m => <option key={m} value={m}>{m}</option>)}
-                </select>
-              </div>
-            </div>
-          )}
-          <div className="input-group">
-          </div>
           <div className="input-group">
             <label style={{display: 'flex', justifyContent: 'space-between'}}>
               項目類別 
-              <button className="btn-icon" onClick={() => setShowSettingsModal(true)} style={{padding: 0}}><Settings size={16}/></button>
+              <button className="btn-icon" onClick={() => setShowSettingsModal(true)} style={{padding: 0, color: 'var(--primary-orange)'}}><Settings size={16}/> 管理</button>
             </label>
             <select value={form.type} onChange={e => setForm({...form, type: e.target.value})}>
               {settings.categories.length === 0 && <option value="">請先新增類別</option>}
@@ -417,13 +385,59 @@ const CalendarTab = () => {
             <label>詳細事項</label>
             <input type="text" placeholder="例如：打狂犬病疫苗" value={form.title} onChange={e => setForm({...form, title: e.target.value})} />
           </div>
+
+          <div style={{ background: '#FAFAFA', padding: '15px', borderRadius: '8px', marginBottom: '15px', border: '1px solid var(--border-color)' }}>
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <div className="input-group" style={{flex: 1, marginBottom: 0}}>
+                <label>開始日期</label>
+                <DatePicker selected={form.date ? new Date(form.date + 'T00:00:00') : null} onChange={date => setForm({...form, date: date ? date.toISOString().split('T')[0] : ''})} dateFormat="yyyy-MM-dd" placeholderText="請選擇日期" />
+              </div>
+              <div className="input-group" style={{flex: 1, marginBottom: 0}}>
+                <label>開始時間</label>
+                <input type="time" value={form.startTime} onChange={e => setForm({...form, startTime: e.target.value})} />
+              </div>
+            </div>
+
+            <label className="checkbox-label" style={{ marginTop: '15px', marginBottom: '10px', display: 'inline-flex', background: 'transparent', border: 'none', padding: 0 }}>
+              <input type="checkbox" checked={form.isDateRange} onChange={e => setForm({...form, isDateRange: e.target.checked})} />
+              設定結束時間
+            </label>
+
+            {form.isDateRange && (
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <div className="input-group" style={{flex: 1, marginBottom: 0}}>
+                  <label>結束日期</label>
+                  <DatePicker selected={form.endDate ? new Date(form.endDate + 'T00:00:00') : null} onChange={date => setForm({...form, endDate: date ? date.toISOString().split('T')[0] : ''})} dateFormat="yyyy-MM-dd" placeholderText="請選擇日期" />
+                </div>
+                <div className="input-group" style={{flex: 1, marginBottom: 0}}>
+                  <label>結束時間</label>
+                  <input type="time" value={form.endTime} onChange={e => setForm({...form, endTime: e.target.value})} />
+                </div>
+              </div>
+            )}
+          </div>
+          
           <div className="input-group">
             <label>重複週期 (天)</label>
             <input type="number" placeholder="例如: 7 (每週重複), 留空為不重複" value={form.repeatDays} onChange={e => setForm({...form, repeatDays: e.target.value})} />
           </div>
-          <button className="btn-primary" onClick={handleSave} style={{marginTop: '20px'}}>
-            <Plus size={20} /> {editingId ? '儲存修改' : '新增排程'}
-          </button>
+
+          <div style={{display: 'flex', justifyContent: 'space-between', marginTop: '25px'}}>
+            {editingId ? (
+              <>
+                <button className="btn-secondary" style={{color: 'var(--primary-orange)', borderColor: 'var(--primary-orange)'}} onClick={() => handleDelete(editingId)}>
+                  <Trash2 size={20} /> 刪除
+                </button>
+                <button className="btn-primary" onClick={handleSave}>
+                  儲存修改
+                </button>
+              </>
+            ) : (
+              <button className="btn-primary" onClick={handleSave} style={{width: '100%'}}>
+                <Plus size={20} /> 新增排程
+              </button>
+            )}
+          </div>
         </Modal>
       )}
 
