@@ -65,7 +65,7 @@ const CalendarTab = () => {
       const originalEvent = events.find(e => e.id === editingId);
       if (originalEvent && originalEvent.notionPageId) {
         try {
-          await fetch(`/api/events/${originalEvent.notionPageId}`, {
+          await fetch(`/api/events?page_id=${originalEvent.notionPageId}`, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ title: form.title, date: form.date })
@@ -82,8 +82,12 @@ const CalendarTab = () => {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ title: form.title, date: form.date })
         });
-        const notionData = await notionRes.json();
-        if (notionData.id) eventData.notionPageId = notionData.id; // 將 Notion ID 記下來
+        if (notionRes.ok) {
+          const notionData = await notionRes.json();
+          if (notionData.id) eventData.notionPageId = notionData.id; // 將 Notion ID 記下來
+        } else {
+          console.error('Notion 新增回傳錯誤狀態:', notionRes.status);
+        }
       } catch (error) {
         console.error('Notion 新增同步失敗:', error);
       }
@@ -116,7 +120,7 @@ const CalendarTab = () => {
     const ev = events.find(e => e.id === id);
     if (ev && ev.notionPageId) {
       try {
-        await fetch(`/api/events/${ev.notionPageId}`, { method: 'DELETE' });
+        await fetch(`/api/events?page_id=${ev.notionPageId}`, { method: 'DELETE' });
       } catch (error) {
         console.error('Notion 刪除同步失敗:', error);
       }
