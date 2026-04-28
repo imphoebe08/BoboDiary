@@ -597,6 +597,7 @@ const DietTab = () => {
   const [editingId, setEditingId] = useState(null);
   const [filter, setFilter] = useState('全部');
   const [newSetting, setNewSetting] = useState({ type: 'brands', value: '' });
+  const [sortOrder, setSortOrder] = useState('desc');
 
   useEffect(() => { 
     const loadAndSync = async () => {
@@ -712,6 +713,24 @@ const DietTab = () => {
   };
 
   const displayedLogs = filter === '全部' ? logs : logs.filter(l => l.category === filter);
+  
+  // 依照日期進行排序
+  const sortedLogs = [...displayedLogs].sort((a, b) => {
+    const dateA = a.date ? a.date.substring(0, 10) : '';
+    const dateB = b.date ? b.date.substring(0, 10) : '';
+    return sortOrder === 'desc' ? dateB.localeCompare(dateA) : dateA.localeCompare(dateB);
+  });
+
+  // 取得不同類別的專屬配色
+  const getCategoryStyle = (category) => {
+    switch(category) {
+      case '飼料': return { bg: 'rgba(252, 190, 50, 0.12)', tag: '#fcbe32' };
+      case '用藥': return { bg: 'rgba(255, 95, 46, 0.12)', tag: '#ff5f2e' };
+      case '保健品': return { bg: 'rgba(86, 168, 203, 0.12)', tag: '#56A8CB' };
+      case '驅蟲藥': return { bg: 'rgba(165, 147, 224, 0.12)', tag: '#A593E0' };
+      default: return { bg: 'var(--card-bg)', tag: 'var(--primary-dark)' };
+    }
+  };
 
   return (
     <div>
@@ -725,17 +744,24 @@ const DietTab = () => {
         </div>
       </div>
 
-      <div className="btn-group" style={{overflowX: 'auto'}}>
-        {['全部', ...settings.categories].map(cat => (
-          <button key={cat} className={`btn-secondary ${filter === cat ? 'active' : ''}`} onClick={() => setFilter(cat)}>{cat}</button>
-        ))}
+      <div className="flex-between" style={{ marginBottom: '15px' }}>
+        <div className="btn-group" style={{overflowX: 'auto', flex: 1, marginBottom: 0}}>
+          {['全部', ...settings.categories].map(cat => (
+            <button key={cat} className={`btn-secondary ${filter === cat ? 'active' : ''}`} style={{whiteSpace: 'nowrap'}} onClick={() => setFilter(cat)}>{cat}</button>
+          ))}
+        </div>
+        <button className="btn-secondary" onClick={() => setSortOrder(prev => prev === 'desc' ? 'asc' : 'desc')} style={{ whiteSpace: 'nowrap', marginLeft: '10px', fontSize: '0.85rem' }}>
+          {sortOrder === 'desc' ? '↓ 日期新到舊' : '↑ 日期舊到新'}
+        </button>
       </div>
 
-      {displayedLogs.map(log => (
-        <div className="card" key={log.id}>
+      {sortedLogs.map(log => {
+        const { bg, tag } = getCategoryStyle(log.category || '飼料');
+        return (
+        <div className="card" key={log.id} style={{ backgroundColor: bg }}>
           <div className="flex-between">
-            <h4 style={{margin: '0 0 10px 0', color: 'var(--primary-orange)'}}>
-              <span className="tag">{log.category || '飼料'}</span>{log.brand}
+            <h4 style={{margin: '0 0 10px 0', color: 'var(--primary-dark)'}}>
+              <span className="tag" style={{ backgroundColor: tag }}>{log.category || '飼料'}</span>{log.brand}
             </h4>
             <div>
               <button className="btn-icon" onClick={() => handleEdit(log)}><Edit2 size={18}/></button>
@@ -747,7 +773,7 @@ const DietTab = () => {
           {log.frequency && <p style={{margin: '5px 0', color: 'var(--text-light)'}}>頻率：{log.frequency}</p>}
           {log.notes && <p style={{margin: '5px 0', color: 'var(--text-light)'}}>備註：{log.notes}</p>}
         </div>
-      ))}
+      )})}
 
       {showFormModal && (
         <Modal title={editingId ? '編輯紀錄' : '新增紀錄'} onClose={() => setShowFormModal(false)}>
