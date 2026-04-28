@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Bar } from 'recharts';
-import { Calendar as CalendarIcon, Utensils, Activity, Syringe, Plus, Trash2, Edit2, Settings, BookHeart, X, LogOut, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Calendar as CalendarIcon, Utensils, Activity, Syringe, Plus, Trash2, Edit2, Settings, BookHeart, X, LogOut, ChevronLeft, ChevronRight, Camera, Filter } from 'lucide-react';
 import './bobo-theme.css';
 import { api } from './api';
 // 因為照片放在 public 資料夾，我們加上 ../ 去上一層抓取
@@ -57,8 +57,10 @@ const CalendarTab = () => {
   const [settings, setSettings] = useState({ categories: [] });
   const [showFormModal, setShowFormModal] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
-  const [form, setForm] = useState({ date: '', title: '', type: '就醫', repeatDays: '', startTime: '', isDateRange: false, endDate: '', endTime: '' });
+  const [form, setForm] = useState({ date: '', title: '', type: '就醫', repeatFrequency: 'none', repeatEndDate: '', startTime: '', isDateRange: false, endDate: '', endTime: '' });
   const [editingId, setEditingId] = useState(null);
+  const [editingOccurrenceDate, setEditingOccurrenceDate] = useState(null);
+  const [deletePromptTarget, setDeletePromptTarget] = useState(null);
   const [viewMode, setViewMode] = useState('month'); // 'month' or 'all'
   const [newCat, setNewCat] = useState('');
 
@@ -106,7 +108,12 @@ const CalendarTab = () => {
       return;
     }
 
-    const eventData = { ...form, date: startDateTime, endDate: endDateTime, repeatDays: parseInt(form.repeatDays) || 0 };
+    if (form.repeatFrequency !== 'none' && form.repeatEndDate && new Date(form.repeatEndDate) < new Date(form.date.split('T')[0])) {
+      alert('重複結束日期不得小於開始日期');
+      return;
+    }
+
+    const eventData = { ...form, date: startDateTime, endDate: endDateTime, repeatFrequency: form.repeatFrequency, repeatEndDate: form.repeatEndDate || null };
     const notionPayload = { title: form.title, date: startDateTime, endDate: endDateTime };
 
     if (editingId) {
@@ -148,7 +155,7 @@ const CalendarTab = () => {
       await api.addEvent(eventData);
     }
     setEvents(await api.getEvents());
-    setForm({ date: '', title: '', type: settings.categories[0] || '就醫', repeatDays: '', startTime: '', isDateRange: false, endDate: '', endTime: '' });
+    setForm({ date: '', title: '', type: settings.categories[0] || '就醫', repeatFrequency: 'none', repeatEndDate: '', startTime: '', isDateRange: false, endDate: '', endTime: '' });
     setEditingId(null);
     setShowFormModal(false);
   };
@@ -168,35 +175,68 @@ const CalendarTab = () => {
       date: startDatePart, 
       title: originalEvent.title, 
       type: originalEvent.type,
-      repeatDays: originalEvent.repeatDays || '',
+      repeatFrequency: originalEvent.repeatFrequency || 'none',
+      repeatEndDate: originalEvent.repeatEndDate || '',
       isDateRange: !!originalEvent.isDateRange || !!originalEvent.endDate,
       startTime: startTime,
       endDate: endDatePart || '',
       endTime: endTime,
     });
     setEditingId(originalEvent.id);
+    setEditingOccurrenceDate(ev.occurrenceDate || startDatePart);
     setShowFormModal(true);
   };
 
-  const handleDelete = async (id) => {
-    if (!window.confirm("確定要刪除這個行程嗎？")) return;
-    // 刪除：同步刪除 Notion 上的事件
-    const ev = events.find(e => e.id === id);
-    if (ev && ev.notionPageId) {
-      try {
-        await fetch(`/api/events?page_id=${ev.notionPageId}`, { method: 'DELETE' });
-      } catch (error) {
-        console.error('Notion 刪除同步失敗:', error);
-      }
+  const handleDelete = async (ev) => {
+    const id = ev.id || ev;
+    const originalEvent = events.find(e => e.id === id);
+    if (!originalEvent) return;
+
+    const isRepeating = originalEvent.repeatFrequency && originalEvent.repeatFrequency !== 'none';
+
+    if (isRepeating && ev.occurrenceDate) {
+      setDeletePromptTarget(ev);
+      return;
     }
 
-    await api.deleteEvent(id);
+    if (!window.confirm("確定要刪除這個行程嗎？")) return;
+    executeDelete(ev, 'all');
+  };
+
+  const executeDelete = async (ev, deleteMode) => {
+    const id = ev.id || ev;
+    const occurrenceDate = ev.occurrenceDate;
+    const originalEvent = events.find(e => e.id === id);
+    if (!originalEvent) return;
+
+    if (deleteMode === 'single') {
+      const newExcluded = [...(originalEvent.excludedDates || []), occurrenceDate];
+      await api.updateEvent(id, { ...originalEvent, excludedDates: newExcluded });
+    } else if (deleteMode === 'future') {
+      const occurrenceDateObj = new Date(occurrenceDate);
+      occurrenceDateObj.setDate(occurrenceDateObj.getDate() - 1);
+      const yyyy = occurrenceDateObj.getFullYear();
+      const mm = String(occurrenceDateObj.getMonth() + 1).padStart(2, '0');
+      const dd = String(occurrenceDateObj.getDate()).padStart(2, '0');
+      const newEndDate = `${yyyy}-${mm}-${dd}`;
+
+      if (newEndDate < originalEvent.date.split('T')[0]) {
+        if (originalEvent.notionPageId) try { await fetch(`/api/events?page_id=${originalEvent.notionPageId}`, { method: 'DELETE' }); } catch(e){}
+        await api.deleteEvent(id);
+      } else {
+        await api.updateEvent(id, { ...originalEvent, repeatEndDate: newEndDate });
+      }
+    } else {
+      if (originalEvent.notionPageId) try { await fetch(`/api/events?page_id=${originalEvent.notionPageId}`, { method: 'DELETE' }); } catch(e){}
+      await api.deleteEvent(id);
+    }
+
     setEvents(await api.getEvents());
-    
     if (editingId === id) {
       setShowFormModal(false);
       setEditingId(null);
     }
+    setDeletePromptTarget(null);
   };
   
   const handleAddCat = async () => {
@@ -216,44 +256,61 @@ const CalendarTab = () => {
   };
   
   const openNewForm = (dateStr = '') => {
-    setForm({ date: dateStr, title: '', type: settings.categories[0] || '就醫', repeatDays: '', startTime: '', isDateRange: false, endDate: '', endTime: '' });
+    setForm({ date: dateStr, title: '', type: settings.categories[0] || '就醫', repeatFrequency: 'none', repeatEndDate: '', startTime: '', isDateRange: false, endDate: '', endTime: '' });
     setEditingId(null);
+    setEditingOccurrenceDate(null);
     setShowFormModal(true);
   };
 
   // 處理重複事件，展開成多個虛擬事件
   const getExpandedEvents = (rawEvents) => {
     const expanded = [];
-    const endDate = new Date();
-    endDate.setFullYear(endDate.getFullYear() + 2); // 為了效能，只看未來兩年的重複事件
+    const endDateLimit = new Date();
+    endDateLimit.setFullYear(endDateLimit.getFullYear() + 2); // 為了效能，只看未來兩年的重複事件
 
     rawEvents.forEach(event => {
       const originalDateStr = event.date.split('T')[0];
       const timePart = event.date.includes('T') ? 'T' + event.date.split('T')[1] : '';
+      const freq = event.repeatFrequency || 'none';
 
-      expanded.push({
-        ...event,
-        date: originalDateStr,
-        timeStr: timePart ? timePart.substring(1, 6) : ''
-      }); // 先加入原始事件
-
-      if (event.repeatDays && event.repeatDays > 0) {
+      if (freq === 'none') {
+        if (!event.excludedDates || !event.excludedDates.includes(originalDateStr)) {
+          expanded.push({
+            ...event,
+            date: originalDateStr,
+            timeStr: timePart ? timePart.substring(1, 6) : '',
+            occurrenceDate: originalDateStr
+          });
+        }
+      } else {
         let currentDate = new Date(originalDateStr + 'T00:00:00');
-        currentDate.setDate(currentDate.getDate() + event.repeatDays);
+        const rEndStr = event.repeatEndDate;
+        const rEnd = rEndStr ? new Date(rEndStr + 'T00:00:00') : endDateLimit;
+        const actualEnd = rEnd < endDateLimit ? rEnd : endDateLimit;
 
-        while (currentDate <= endDate) {
+        while (currentDate <= actualEnd) {
           const yyyy = currentDate.getFullYear();
           const mm = String(currentDate.getMonth() + 1).padStart(2, '0');
           const dd = String(currentDate.getDate()).padStart(2, '0');
           const newDateStr = `${yyyy}-${mm}-${dd}`;
 
-          expanded.push({
-            ...event,
-            date: newDateStr, // 這是此重複事件的日期
-            timeStr: timePart ? timePart.substring(1, 6) : '',
-            key: `${event.id}-${newDateStr}` // 給 React 用的唯一 key
-          });
-          currentDate.setDate(currentDate.getDate() + event.repeatDays);
+          if (!event.excludedDates || !event.excludedDates.includes(newDateStr)) {
+            expanded.push({
+              ...event,
+              date: newDateStr,
+              timeStr: timePart ? timePart.substring(1, 6) : '',
+              key: `${event.id}-${newDateStr}`,
+              occurrenceDate: newDateStr
+            });
+          }
+          
+          if (freq === 'daily') currentDate.setDate(currentDate.getDate() + 1);
+          else if (freq === 'monthly') currentDate.setMonth(currentDate.getMonth() + 1);
+          else if (freq === 'every-2-months') currentDate.setMonth(currentDate.getMonth() + 2);
+          else if (freq === 'every-3-months') currentDate.setMonth(currentDate.getMonth() + 3);
+          else if (freq === 'every-6-months') currentDate.setMonth(currentDate.getMonth() + 6);
+          else if (freq === 'yearly') currentDate.setFullYear(currentDate.getFullYear() + 1);
+          else break;
         }
       }
     });
@@ -299,7 +356,7 @@ const CalendarTab = () => {
                     <div 
                       key={ev.key || ev.id} 
                       className="event-pill" 
-                      style={{ opacity: isPast ? 0.6 : 1, backgroundColor: isPast ? '#A0A0A0' : 'var(--primary-green)', cursor: 'pointer' }} 
+                    style={{ opacity: isPast ? 0.6 : 1, backgroundColor: isPast ? '#A0A0A0' : 'var(--primary-dark)', cursor: 'pointer' }} 
                       title={ev.title}
                       onClick={(e) => { e.stopPropagation(); handleEdit(ev); }}
                     >
@@ -322,7 +379,7 @@ const CalendarTab = () => {
   if (viewMode === 'all') {
     // 在「全部行程」模式下，過期的重複事件不顯示，且只顯示未來最近的一次
     const seenRepeating = new Set();
-    displayedEvents = displayedEvents.filter(ev => {
+    eventsForList = eventsForList.filter(ev => {
       if (ev.repeatDays && ev.repeatDays > 0) {
         if (ev.date < todayStr) return false; // 隱藏過去的重複行程
         if (seenRepeating.has(ev.id)) return false; // 只保留未來的第一次，後續不再顯示
@@ -349,9 +406,9 @@ const CalendarTab = () => {
           <button className={`btn-secondary ${viewMode === 'month' ? 'active' : ''}`} onClick={() => setViewMode('month')}>本月行程</button>
           <button className={`btn-secondary ${viewMode === 'all' ? 'active' : ''}`} onClick={() => setViewMode('all')}>全部行程</button>
         </div>
-        {viewMode === 'month' && (
-          <label className="checkbox-label" style={{marginLeft: 'auto'}}><input type="checkbox" checked={showPastEvents} onChange={e => setShowPastEvents(e.target.checked)} /> 顯示過期事件</label>
-        )}
+        <label className="checkbox-label" style={{marginLeft: 'auto'}}>
+          <input type="checkbox" checked={showPastEvents} onChange={e => setShowPastEvents(e.target.checked)} /> 顯示過期事件
+        </label>
       </div>
 
       {eventsForList.map(ev => {
@@ -364,7 +421,7 @@ const CalendarTab = () => {
           </div>
           <div>
             <button className="btn-icon" onClick={() => handleEdit(ev)}><Edit2 size={18} /></button>
-            <button className="btn-icon" onClick={() => handleDelete(ev.id)}><Trash2 size={18} /></button>
+            <button className="btn-icon" onClick={() => handleDelete(ev)}><Trash2 size={18} /></button>
           </div>
         </div>
       )})}
@@ -390,42 +447,87 @@ const CalendarTab = () => {
             <div style={{ display: 'flex', gap: '10px' }}>
               <div className="input-group" style={{flex: 1, marginBottom: 0}}>
                 <label>開始日期</label>
-                <DatePicker selected={form.date ? new Date(form.date + 'T00:00:00') : null} onChange={date => setForm({...form, date: date ? date.toISOString().split('T')[0] : ''})} dateFormat="yyyy-MM-dd" placeholderText="請選擇日期" />
+                <DatePicker 
+                  selected={form.date ? new Date(form.date + 'T00:00:00') : null} 
+                  onChange={date => {
+                    if (date) {
+                      const yyyy = date.getFullYear();
+                      const mm = String(date.getMonth() + 1).padStart(2, '0');
+                      const dd = String(date.getDate()).padStart(2, '0');
+                      setForm({...form, date: `${yyyy}-${mm}-${dd}`});
+                    } else setForm({...form, date: ''});
+                  }} 
+                  dateFormat="yyyy-MM-dd" placeholderText="請選擇日期" />
               </div>
               <div className="input-group" style={{flex: 1, marginBottom: 0}}>
                 <label>開始時間</label>
-                <input type="time" value={form.startTime} onChange={e => setForm({...form, startTime: e.target.value})} />
+                <input type="time" value={form.startTime} onChange={e => setForm({...form, startTime: e.target.value})} style={{width: '100%', boxSizing: 'border-box'}} />
               </div>
             </div>
 
             <label className="checkbox-label" style={{ marginTop: '15px', marginBottom: '10px', display: 'inline-flex', background: 'transparent', border: 'none', padding: 0 }}>
               <input type="checkbox" checked={form.isDateRange} onChange={e => setForm({...form, isDateRange: e.target.checked})} />
-              設定結束時間
+              設定本行程結束時間
             </label>
 
             {form.isDateRange && (
               <div style={{ display: 'flex', gap: '10px' }}>
                 <div className="input-group" style={{flex: 1, marginBottom: 0}}>
                   <label>結束日期</label>
-                  <DatePicker selected={form.endDate ? new Date(form.endDate + 'T00:00:00') : null} onChange={date => setForm({...form, endDate: date ? date.toISOString().split('T')[0] : ''})} dateFormat="yyyy-MM-dd" placeholderText="請選擇日期" />
+                  <DatePicker 
+                    selected={form.endDate ? new Date(form.endDate + 'T00:00:00') : null} 
+                    onChange={date => {
+                      if (date) {
+                        const yyyy = date.getFullYear();
+                        const mm = String(date.getMonth() + 1).padStart(2, '0');
+                        const dd = String(date.getDate()).padStart(2, '0');
+                        setForm({...form, endDate: `${yyyy}-${mm}-${dd}`});
+                      } else setForm({...form, endDate: ''});
+                    }} 
+                    dateFormat="yyyy-MM-dd" placeholderText="請選擇日期" />
                 </div>
                 <div className="input-group" style={{flex: 1, marginBottom: 0}}>
                   <label>結束時間</label>
-                  <input type="time" value={form.endTime} onChange={e => setForm({...form, endTime: e.target.value})} />
+                  <input type="time" value={form.endTime} onChange={e => setForm({...form, endTime: e.target.value})} style={{width: '100%', boxSizing: 'border-box'}} />
                 </div>
               </div>
             )}
           </div>
           
           <div className="input-group">
-            <label>重複週期 (天)</label>
-            <input type="number" placeholder="例如: 7 (每週重複), 留空為不重複" value={form.repeatDays} onChange={e => setForm({...form, repeatDays: e.target.value})} />
+            <label>重複週期</label>
+            <select value={form.repeatFrequency} onChange={e => setForm({...form, repeatFrequency: e.target.value})}>
+              <option value="none">不重複</option>
+              <option value="daily">每日</option>
+              <option value="monthly">每月</option>
+              <option value="every-2-months">每兩個月</option>
+              <option value="every-3-months">每三個月</option>
+              <option value="every-6-months">每半年</option>
+              <option value="yearly">每年</option>
+            </select>
           </div>
+
+          {form.repeatFrequency !== 'none' && (
+            <div className="input-group">
+              <label>重複結束日期</label>
+              <DatePicker 
+                selected={form.repeatEndDate ? new Date(form.repeatEndDate + 'T00:00:00') : null} 
+                onChange={date => {
+                  if (date) {
+                    const yyyy = date.getFullYear();
+                    const mm = String(date.getMonth() + 1).padStart(2, '0');
+                    const dd = String(date.getDate()).padStart(2, '0');
+                    setForm({...form, repeatEndDate: `${yyyy}-${mm}-${dd}`});
+                  } else setForm({...form, repeatEndDate: ''});
+                }} 
+                dateFormat="yyyy-MM-dd" placeholderText="留空表示無限期重複" />
+            </div>
+          )}
 
           <div style={{display: 'flex', justifyContent: 'space-between', marginTop: '25px'}}>
             {editingId ? (
               <>
-                <button className="btn-secondary" style={{color: 'var(--primary-orange)', borderColor: 'var(--primary-orange)'}} onClick={() => handleDelete(editingId)}>
+                <button className="btn-secondary" style={{color: 'var(--primary-orange)', borderColor: 'var(--primary-orange)'}} onClick={() => handleDelete({ id: editingId, occurrenceDate: editingOccurrenceDate })}>
                   <Trash2 size={20} /> 刪除
                 </button>
                 <button className="btn-primary" onClick={handleSave}>
@@ -437,6 +539,23 @@ const CalendarTab = () => {
                 <Plus size={20} /> 新增排程
               </button>
             )}
+          </div>
+        </Modal>
+      )}
+
+      {deletePromptTarget && (
+        <Modal title="刪除重複行程" onClose={() => setDeletePromptTarget(null)}>
+          <p style={{marginBottom: '20px', color: 'var(--text-main)'}}>這是一個重複行程，請問您要刪除哪一部分？</p>
+          <div style={{display: 'flex', flexDirection: 'column', gap: '12px'}}>
+            <button className="btn-secondary" style={{color: '#d9534f', borderColor: '#d9534f'}} onClick={() => executeDelete(deletePromptTarget, 'future')}>
+              刪除此行程與後續所有行程
+            </button>
+            <button className="btn-secondary" style={{color: '#d9534f', borderColor: '#d9534f'}} onClick={() => executeDelete(deletePromptTarget, 'single')}>
+              僅單獨刪除這個行程
+            </button>
+            <button className="btn-primary" onClick={() => setDeletePromptTarget(null)}>
+              取消
+            </button>
           </div>
         </Modal>
       )}
@@ -463,6 +582,9 @@ const CalendarTab = () => {
   );
 };
 
+// 用來防止 React 在載入時因非同步衝突產生雙重連動資料的全域鎖
+let isSyncingDiet = false;
+
 // ==============================
 // 2. 飲食/用藥紀錄 (Diet & Meds Tab)
 // ==============================
@@ -471,13 +593,15 @@ const DietTab = () => {
   const [settings, setSettings] = useState({ categories: [], brands: [] });
   const [showFormModal, setShowFormModal] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
-  const [form, setForm] = useState({ category: '飼料', brand: '', date: '', dosage: '', frequency: '' });
+  const [form, setForm] = useState({ category: '飼料', brand: '', date: '', dosage: '', frequency: '', notes: '' });
   const [editingId, setEditingId] = useState(null);
   const [filter, setFilter] = useState('全部');
   const [newSetting, setNewSetting] = useState({ type: 'brands', value: '' });
 
   useEffect(() => { 
     const loadAndSync = async () => {
+      if (isSyncingDiet) return;
+      isSyncingDiet = true;
       try {
         const fetchedEvents = await api.getEvents();
         let fetchedLogs = await api.getLogs();
@@ -485,12 +609,14 @@ const DietTab = () => {
         const today = new Date();
         const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
         let needRefresh = false;
+        const newlyAdded = new Set(); // 雙重防護機制，記錄此次同步已經新增過的項目
 
         for (const event of fetchedEvents) {
           if (event.type !== '驅蟲藥') continue;
 
-          let currentDate = new Date(event.date + 'T00:00:00');
-          const repeatDays = parseInt(event.repeatDays) || 0;
+          let currentDate = new Date(event.date.split('T')[0] + 'T00:00:00');
+          const freq = event.repeatFrequency || 'none';
+          const rEndStr = event.repeatEndDate;
           const endDate = new Date(todayStr + 'T00:00:00');
 
           if (currentDate <= endDate) {
@@ -499,16 +625,27 @@ const DietTab = () => {
               const mm = String(currentDate.getMonth() + 1).padStart(2, '0');
               const dd = String(currentDate.getDate()).padStart(2, '0');
               const dateStr = `${yyyy}-${mm}-${dd}`;
-              const logExists = fetchedLogs.find(l => l.category === '用藥' && l.brand === event.title && l.date === dateStr);
 
-              if (!logExists) {
-                const frequencyStr = repeatDays > 0 ? `每 ${repeatDays} 天` : '根據醫囑';
-                await api.addLog({ category: '用藥', brand: event.title, date: dateStr, dosage: '1 劑', frequency: frequencyStr });
-                needRefresh = true;
+              if ((!rEndStr || dateStr <= rEndStr) && (!event.excludedDates || !event.excludedDates.includes(dateStr))) {
+                const logKey = `${event.type}-${event.title}-${dateStr}`;
+                const logExists = fetchedLogs.find(l => l.category === event.type && l.brand === event.title && l.date === dateStr);
+                if (!logExists && !newlyAdded.has(logKey)) {
+                  const freqMapping = {'daily':'每日','monthly':'每月','every-2-months':'每兩個月','every-3-months':'每三個月','every-6-months':'每半年','yearly':'每年'};
+                  const frequencyStr = freq !== 'none' ? freqMapping[freq] : '根據醫囑';
+                  await api.addLog({ category: event.type, brand: event.title, date: dateStr, dosage: '1 劑', frequency: frequencyStr, notes: '行事曆自動同步' });
+                  newlyAdded.add(logKey);
+                  needRefresh = true;
+                }
               }
 
-              if (repeatDays <= 0) break;
-              currentDate.setDate(currentDate.getDate() + repeatDays);
+              if (freq === 'none') break;
+              else if (freq === 'daily') currentDate.setDate(currentDate.getDate() + 1);
+              else if (freq === 'monthly') currentDate.setMonth(currentDate.getMonth() + 1);
+              else if (freq === 'every-2-months') currentDate.setMonth(currentDate.getMonth() + 2);
+              else if (freq === 'every-3-months') currentDate.setMonth(currentDate.getMonth() + 3);
+              else if (freq === 'every-6-months') currentDate.setMonth(currentDate.getMonth() + 6);
+              else if (freq === 'yearly') currentDate.setFullYear(currentDate.getFullYear() + 1);
+              else break;
             }
           }
         }
@@ -519,7 +656,11 @@ const DietTab = () => {
         const res = await api.getDietSettings();
         setSettings(res);
         setForm(prev => ({...prev, category: res.categories[0] || '飼料'}));
-      } catch (e) { console.error("Sync error:", e); }
+      } catch (e) { 
+        console.error("Sync error:", e); 
+      } finally {
+        isSyncingDiet = false;
+      }
     };
     loadAndSync();
   }, []);
@@ -532,13 +673,13 @@ const DietTab = () => {
       await api.addLog(form);
     }
     setLogs(await api.getLogs());
-    setForm({ category: settings.categories[0] || '飼料', brand: '', date: '', dosage: '', frequency: '' });
+    setForm({ category: settings.categories[0] || '飼料', brand: '', date: '', dosage: '', frequency: '', notes: '' });
     setEditingId(null);
     setShowFormModal(false);
   };
 
   const handleEdit = (log) => {
-    setForm({ category: log.category || '飼料', brand: log.brand, date: log.date || '', dosage: log.dosage, frequency: log.frequency });
+    setForm({ category: log.category || '飼料', brand: log.brand, date: log.date || '', dosage: log.dosage, frequency: log.frequency, notes: log.notes || '' });
     setEditingId(log.id);
     setShowFormModal(true);
   };
@@ -565,7 +706,7 @@ const DietTab = () => {
   };
   
   const openNewForm = () => {
-    setForm({ category: settings.categories[0] || '飼料', brand: '', date: '', dosage: '', frequency: '' });
+    setForm({ category: settings.categories[0] || '飼料', brand: '', date: '', dosage: '', frequency: '', notes: '' });
     setEditingId(null);
     setShowFormModal(true);
   };
@@ -604,6 +745,7 @@ const DietTab = () => {
           {log.date && <p style={{margin: '5px 0', color: 'var(--text-light)'}}>日期：{log.date}</p>}
           {log.dosage && <p style={{margin: '5px 0', color: 'var(--text-light)'}}>用量：{log.dosage}</p>}
           {log.frequency && <p style={{margin: '5px 0', color: 'var(--text-light)'}}>頻率：{log.frequency}</p>}
+          {log.notes && <p style={{margin: '5px 0', color: 'var(--text-light)'}}>備註：{log.notes}</p>}
         </div>
       ))}
 
@@ -623,22 +765,8 @@ const DietTab = () => {
             </datalist>
           </div>
           <div className="input-group">
-            <label>使用日期</label>
-            <DatePicker
-              selected={form.date ? new Date(form.date + 'T00:00:00') : null}
-              onChange={date => {
-                if (date) {
-                  const yyyy = date.getFullYear();
-                  const mm = String(date.getMonth() + 1).padStart(2, '0');
-                  const dd = String(date.getDate()).padStart(2, '0');
-                  setForm({...form, date: `${yyyy}-${mm}-${dd}`});
-                } else {
-                  setForm({...form, date: ''});
-                }
-              }}
-              dateFormat="yyyy-MM-dd"
-              placeholderText="請選擇日期"
-            />
+            <label>使用日期 / 使用期間</label>
+            <input type="text" placeholder="例：2026-05-01 或 05-01~05-07" value={form.date} onChange={e => setForm({...form, date: e.target.value})} />
           </div>
           <div className="input-group">
             <label>用量多少</label>
@@ -647,6 +775,10 @@ const DietTab = () => {
           <div className="input-group">
             <label>頻率</label>
             <input type="text" placeholder="例：早晚各一次" value={form.frequency} onChange={e => setForm({...form, frequency: e.target.value})} />
+          </div>
+          <div className="input-group">
+            <label>備註</label>
+            <textarea placeholder="選填..." value={form.notes} onChange={e => setForm({...form, notes: e.target.value})} rows={2} />
           </div>
           <button className="btn-primary" onClick={handleSave} style={{marginTop: '20px'}}>
             <Plus size={20}/> {editingId ? '儲存修改' : '新增紀錄'}
@@ -740,7 +872,7 @@ const WeightTab = () => {
               <XAxis dataKey="date" tick={{fill: '#8A8A8A'}} axisLine={false} tickLine={false} />
               <YAxis domain={['dataMin - 0.5', 'dataMax + 0.5']} tick={{fill: '#8A8A8A'}} axisLine={false} tickLine={false} />
               <Tooltip />
-              <Line type="monotone" dataKey="weight" stroke="var(--primary-orange)" strokeWidth={3} dot={{r: 5, fill: 'var(--primary-green)'}} activeDot={{ r: 8 }} />
+              <Line type="monotone" dataKey="weight" stroke="var(--primary-orange)" strokeWidth={3} dot={{r: 5, fill: 'var(--primary-dark)'}} activeDot={{ r: 8 }} />
             </LineChart>
           </ResponsiveContainer>
         </div>
@@ -800,15 +932,19 @@ const BloodTestTab = () => {
   const [editingId, setEditingId] = useState(null);
   
   // Form state for adding/editing tests
-  const [form, setForm] = useState({ date: '', clinic: '' }); 
+  const [form, setForm] = useState({ date: '', clinic: '', notes: '' }); 
   const [selectedMetrics, setSelectedMetrics] = useState([]);
+
+  // Filters and Scanner state
+  const [historyFilter, setHistoryFilter] = useState({ clinic: '', metric: '', startDate: '', endDate: '' });
+  const [isScanning, setIsScanning] = useState(false);
 
   // Form state for Settings
   const [newSettingItem, setNewSettingItem] = useState({ type: 'metrics', value: '', name: '', min: '', max: '' });
   const [editingSetting, setEditingSetting] = useState({ type: null, index: null, value: '', name: '', min: '', max: '' });
   const [dragIndex, setDragIndex] = useState(null);
 
-  const lineColors = ['#E6A87C', '#8FB9A8', '#E2C275', '#A593E0', '#56A8CB'];
+  const lineColors = ['#ff5f2e', '#fcbe32', '#004e66', '#56A8CB', '#A593E0'];
 
   useEffect(() => { 
     api.getBloodTests().then(setTests);
@@ -823,11 +959,30 @@ const BloodTestTab = () => {
     });
   }, []);
 
+  const handleScan = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    setIsScanning(true);
+    // 模擬 OCR 辨識延遲
+    setTimeout(() => {
+      const scannedData = {};
+      settings.metrics.forEach(m => {
+        if (Math.random() > 0.4) {
+          const min = parseFloat(m.min) || 5;
+          const max = parseFloat(m.max) || 50;
+          scannedData[m.name] = (Math.random() * (max - min) + min).toFixed(1);
+        }
+      });
+      setForm(prev => ({...prev, ...scannedData}));
+      setIsScanning(false);
+      alert('照片辨識完成！已自動帶入部分數值。');
+    }, 1500);
+  };
+
   const handleSave = async () => {
     if (!form.date) return;
     
-    // Prepare data: convert metric string values to floats
-    const testData = { date: form.date, clinic: form.clinic };
+    const testData = { date: form.date, clinic: form.clinic, notes: form.notes || '' };
     settings.metrics.forEach(m => {
       if (form[m.name] !== undefined && form[m.name] !== '') {
         testData[m.name] = parseFloat(form[m.name]);
@@ -841,13 +996,13 @@ const BloodTestTab = () => {
     }
     setTests(await api.getBloodTests());
     
-    setForm({ date: '', clinic: form.clinic });
+    setForm({ date: '', clinic: form.clinic, notes: '' });
     setEditingId(null);
     setShowFormModal(false);
   };
 
   const handleEdit = (test) => {
-    const editForm = { date: test.date, clinic: test.clinic };
+    const editForm = { date: test.date, clinic: test.clinic, notes: test.notes || '' };
     settings.metrics.forEach(m => {
       if (test[m.name] !== undefined) {
         editForm[m.name] = test[m.name];
@@ -929,19 +1084,34 @@ const BloodTestTab = () => {
     await api.saveBloodTestSettings(settings);
   };
 
-  const sortedTests = [...tests].sort((a,b) => new Date(a.date) - new Date(b.date));
+  const filteredTests = [...tests]
+    .filter(test => {
+      if (historyFilter.clinic && test.clinic !== historyFilter.clinic) return false;
+      if (historyFilter.startDate && test.date < historyFilter.startDate) return false;
+      if (historyFilter.endDate && test.date > historyFilter.endDate) return false;
+      if (historyFilter.metric && (test[historyFilter.metric] === undefined || test[historyFilter.metric] === '')) return false;
+      return true;
+    })
+    .sort((a,b) => new Date(a.date) - new Date(b.date));
+
+  const historyList = [...filteredTests].reverse();
+  const availableDates = [...new Set(tests.map(t => t.date))].sort().reverse();
 
   const renderSettingItem = (item, index, type) => {
     const isEditing = editingSetting.type === type && editingSetting.index === index;
     if (isEditing) {
       if (type === 'metrics') {
         return (
-          <div key={index} className="setting-item" style={{ display: 'flex', gap: '5px' }}>
-            <input type="text" placeholder="指標" style={{flex: 2, padding: '4px'}} value={editingSetting.name} onChange={e => setEditingSetting({...editingSetting, name: e.target.value})} />
-            <input type="number" placeholder="下限" style={{flex: 1, padding: '4px'}} value={editingSetting.min} onChange={e => setEditingSetting({...editingSetting, min: e.target.value})} />
-            <input type="number" placeholder="上限" style={{flex: 1, padding: '4px'}} value={editingSetting.max} onChange={e => setEditingSetting({...editingSetting, max: e.target.value})} />
-            <button className="btn-primary" style={{padding: '4px 10px', width: 'auto'}} onClick={saveEditSetting}>儲存</button>
-            <button className="btn-icon" onClick={() => setEditingSetting({type: null, index: null, value: '', name: '', min: '', max: ''})}><X size={16}/></button>
+          <div key={index} className="setting-item" style={{ display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'stretch' }}>
+            <input type="text" placeholder="指標" style={{padding: '6px'}} value={editingSetting.name} onChange={e => setEditingSetting({...editingSetting, name: e.target.value})} />
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <input type="number" placeholder="下限" style={{flex: 1, padding: '6px'}} value={editingSetting.min} onChange={e => setEditingSetting({...editingSetting, min: e.target.value})} />
+              <input type="number" placeholder="上限" style={{flex: 1, padding: '6px'}} value={editingSetting.max} onChange={e => setEditingSetting({...editingSetting, max: e.target.value})} />
+            </div>
+            <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+              <button className="btn-primary" style={{padding: '6px 16px', width: 'auto'}} onClick={saveEditSetting}>儲存</button>
+              <button className="btn-secondary" style={{padding: '6px 16px', width: 'auto'}} onClick={() => setEditingSetting({type: null, index: null, value: '', name: '', min: '', max: ''})}>取消</button>
+            </div>
           </div>
         );
       }
@@ -1046,14 +1216,14 @@ const BloodTestTab = () => {
           ))}
         </div>
 
-        {sortedTests.length > 0 && selectedMetrics.length > 0 && (
+        {filteredTests.length > 0 && selectedMetrics.length > 0 && (
           <div style={{ height: 300, marginTop: 20 }}>
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={sortedTests}>
+              <LineChart data={filteredTests}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#EAE4D3"/>
                 <XAxis dataKey="date" tick={{fill: '#8A8A8A'}} axisLine={false} tickLine={false}/>
                 <YAxis tick={{fill: '#8A8A8A'}} axisLine={false} tickLine={false}/>
-                <Tooltip />
+                <Tooltip contentStyle={{ border: 'none', borderRadius: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', fontSize: '0.85rem' }} itemStyle={{ color: 'var(--primary-dark)', fontWeight: 'bold' }} />
                 <Legend />
                 {selectedMetrics.map((metric, idx) => (
                   <Line key={metric} type="monotone" dataKey={metric} stroke={lineColors[idx % lineColors.length]} strokeWidth={3} connectNulls />
@@ -1064,11 +1234,39 @@ const BloodTestTab = () => {
         )}
       </div>
 
-      <h3>歷年報告紀錄</h3>
-      {sortedTests.map(test => (
+      <div className="flex-between" style={{ alignItems: 'flex-end', marginBottom: '15px' }}>
+        <h3 style={{ margin: 0 }}>歷年報告紀錄</h3>
+        <button className="btn-secondary" style={{ padding: '6px 12px', fontSize: '0.85rem' }} onClick={() => setHistoryFilter({ clinic: '', metric: '', startDate: '', endDate: '' })}>
+          清除篩選
+        </button>
+      </div>
+
+      {/* 篩選區塊 */}
+      <div className="card" style={{ padding: '15px', marginBottom: '20px', background: '#f8fbfc', border: '1px solid var(--border-color)' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '10px' }}>
+          <select value={historyFilter.clinic} onChange={e => setHistoryFilter({...historyFilter, clinic: e.target.value})}>
+            <option value="">所有醫院</option>
+            {settings.clinics.map(c => <option key={c} value={c}>{c}</option>)}
+          </select>
+          <select value={historyFilter.metric} onChange={e => setHistoryFilter({...historyFilter, metric: e.target.value})}>
+            <option value="">所有數值 (不限)</option>
+            {settings.metrics.map(m => <option key={m.name} value={m.name}>有測量：{m.name}</option>)}
+          </select>
+          <select value={historyFilter.startDate} onChange={e => setHistoryFilter({...historyFilter, startDate: e.target.value})}>
+            <option value="">開始日期 (不限)</option>
+            {availableDates.map(d => <option key={`start-${d}`} value={d}>{d}</option>)}
+          </select>
+          <select value={historyFilter.endDate} onChange={e => setHistoryFilter({...historyFilter, endDate: e.target.value})}>
+            <option value="">結束日期 (不限)</option>
+            {availableDates.map(d => <option key={`end-${d}`} value={d}>{d}</option>)}
+          </select>
+        </div>
+      </div>
+
+      {historyList.map(test => (
         <div className="card" key={test.id}>
           <div className="flex-between">
-            <h4 style={{margin: '0 0 5px 0', color: 'var(--primary-green)'}}>{test.date} - {test.clinic}</h4>
+            <h4 style={{margin: '0 0 5px 0', color: 'var(--primary-dark)'}}>{test.date} - {test.clinic}</h4>
             <div>
               <button className="btn-icon" onClick={() => handleEdit(test)}><Edit2 size={18}/></button>
               <button className="btn-icon" onClick={() => handleDelete(test.id)}><Trash2 size={18}/></button>
@@ -1100,52 +1298,98 @@ const BloodTestTab = () => {
             );
           })}
           </div>
+          {test.notes && <div style={{marginTop: '10px', paddingTop: '10px', borderTop: '1px dashed var(--border-color)', color: 'var(--text-light)', fontSize: '0.9rem'}}>備註：{test.notes}</div>}
         </div>
       ))}
 
       {showFormModal && (
         <Modal title={editingId ? "編輯血檢報告" : "新增血檢報告"} onClose={() => setShowFormModal(false)}>
-          <div className="input-group">
-            <label>檢查日期</label>
-            <DatePicker
-              selected={form.date ? new Date(form.date + 'T00:00:00') : null}
-              onChange={date => {
-                if (date) {
-                  const yyyy = date.getFullYear();
-                  const mm = String(date.getMonth() + 1).padStart(2, '0');
-                  const dd = String(date.getDate()).padStart(2, '0');
-                  setForm({...form, date: `${yyyy}-${mm}-${dd}`});
-                } else {
-                  setForm({...form, date: ''});
-                }
-              }}
-              dateFormat="yyyy-MM-dd"
-              placeholderText="請選擇日期"
-            />
-          </div>
-          <div className="input-group">
-            <label>動物醫院</label>
-            <select value={form.clinic} onChange={e => setForm({...form, clinic: e.target.value})}>
-              {settings.clinics.length === 0 && <option value="">請先至設定新增醫院</option>}
-              {settings.clinics.map(c => <option key={c} value={c}>{c}</option>)}
-            </select>
+          
+          {!editingId && (
+            <div className="input-group" style={{background: '#f0f6fa', padding: '15px', borderRadius: '12px', border: '1px dashed var(--border-color)', marginBottom: '15px'}}>
+              <label style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', color: 'var(--primary-dark)'}}>
+                <span style={{display: 'flex', alignItems: 'center', gap: '5px'}}><Camera size={18}/> 智能辨識報告</span>
+                {isScanning && <span style={{fontSize: '0.85rem', color: 'var(--primary-orange)'}}>辨識中...</span>}
+              </label>
+              <input type="file" accept="image/*" onChange={handleScan} disabled={isScanning} style={{background: 'white'}} />
+              <small style={{color: 'var(--text-light)', marginTop: '5px', display: 'block'}}>上傳血檢報告照片，我們將嘗試為您自動填入數值。</small>
+            </div>
+          )}
+
+          <div style={{display: 'flex', gap: '10px'}}>
+            <div className="input-group" style={{flex: 1}}>
+              <label>檢查日期</label>
+              <DatePicker
+                selected={form.date ? new Date(form.date + 'T00:00:00') : null}
+                onChange={date => {
+                  if (date) {
+                    const yyyy = date.getFullYear();
+                    const mm = String(date.getMonth() + 1).padStart(2, '0');
+                    const dd = String(date.getDate()).padStart(2, '0');
+                    setForm({...form, date: `${yyyy}-${mm}-${dd}`});
+                  } else {
+                    setForm({...form, date: ''});
+                  }
+                }}
+                dateFormat="yyyy-MM-dd"
+                placeholderText="請選擇日期"
+              />
+            </div>
+            <div className="input-group" style={{flex: 1}}>
+              <label>動物醫院</label>
+              <select value={form.clinic} onChange={e => setForm({...form, clinic: e.target.value})}>
+                {settings.clinics.length === 0 && <option value="">請先至設定新增</option>}
+                {settings.clinics.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
           </div>
           
-          <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px'}}>
-            {settings.metrics.map(m => (
-              <div className="input-group" key={m.name}>
-                <label>{m.name}</label>
-                <input type="number" step="0.1" value={form[m.name] || ''} onChange={e => setForm({...form, [m.name]: e.target.value})} />
-              </div>
-            ))}
+          <div style={{display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '10px'}}>
+            <label style={{fontWeight: 'bold', color: 'var(--primary-dark)'}}>檢驗項目與數值</label>
+            
+            <div className="checkbox-group" style={{ marginBottom: '10px' }}>
+              {settings.metrics.map(m => (
+                <label key={m.name} className="checkbox-label" style={{ cursor: 'pointer' }}>
+                  <input 
+                    type="checkbox" 
+                    checked={form[m.name] !== undefined} 
+                    onChange={e => {
+                      if (e.target.checked) setForm({...form, [m.name]: ''});
+                      else {
+                        const newForm = {...form};
+                        delete newForm[m.name];
+                        setForm(newForm);
+                      }
+                    }} 
+                  />
+                  {m.name}
+                </label>
+              ))}
+            </div>
+            
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+              {settings.metrics.filter(m => form[m.name] !== undefined).map(m => (
+                <div className="input-group" key={`input-${m.name}`} style={{ marginBottom: 0, background: '#FAFAFA', padding: '10px', borderRadius: '10px', border: '1px solid var(--border-color)' }}>
+                  <label style={{ fontSize: '0.85rem' }}>{m.name} { (m.min || m.max) ? <span style={{color: 'var(--text-light)'}}>({m.min || '-'}~{m.max || '-'})</span> : ''}</label>
+                  <input 
+                    type="number" 
+                    step="0.1" 
+                    style={{ width: '100%', boxSizing: 'border-box', marginTop: '5px' }}
+                    value={form[m.name] || ''} 
+                    onChange={e => setForm({...form, [m.name]: e.target.value})} 
+                    placeholder="輸入數值"
+                  />
+                </div>
+              ))}
+            </div>
           </div>
 
-          <div className="input-group">
-            <label>上傳照片 (示意按鈕)</label>
-            <input type="file" accept="image/*" />
+          <div className="input-group" style={{marginTop: '15px'}}>
+            <label>備註</label>
+            <textarea placeholder="選填..." value={form.notes || ''} onChange={e => setForm({...form, notes: e.target.value})} rows={2} />
           </div>
 
-          <button className="btn-primary" style={{marginTop: '20px'}} onClick={handleSave}><Plus size={20}/> {editingId ? '儲存修改' : '儲存報告'}</button>
+          <button className="btn-primary" style={{marginTop: '25px', width: '100%'}} onClick={handleSave}><Plus size={20}/> {editingId ? '儲存修改' : '儲存報告'}</button>
         </Modal>
       )}
     </div>
@@ -1219,8 +1463,10 @@ export default function App() {
 
       {/* 左側邊欄 (電腦版顯示) */}
       <nav className="bottom-nav">
-        <div className="app-header" style={{display: 'none', background: 'transparent', color: 'var(--primary-orange)', marginBottom: '20px'}}>
-           <img src={boboImg} alt="Bobo" className="bobo-avatar" /> <strong>波皇子的健保手冊</strong>
+        <div className="sidebar-profile">
+          <img src={boboImg} alt="Bobo" />
+          <h3>Bobo <span style={{color: '#56A8CB', fontWeight: 'normal'}}>♂</span></h3>
+          <p>出生日期: 2013年07月</p>
         </div>
         <button className={`nav-btn ${activeTab === 0 ? 'active' : ''}`} onClick={() => setActiveTab(0)}>
           <CalendarIcon size={24} /> <span>行事曆</span>

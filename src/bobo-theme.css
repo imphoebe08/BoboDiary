@@ -1,14 +1,14 @@
 @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap');
 
 :root {
-  --bg-color: #F4F2EB; /* 燕麥白 (更文青) */
-  --primary-green: #6C8274; /* 靜謐灰綠 */
-  --primary-orange: #C86F54; /* 磚紅色 (更顯眼、有質感) */
-  --primary-yellow: #C8A963; /* 復古黃 */
-  --text-main: #4A4D4A;
-  --text-light: #8A8D8A;
+  --bg-color: #e1eef6; 
+  --primary-dark: #004e66; 
+  --primary-orange: #ff5f2e; 
+  --primary-yellow: #fcbe32; 
+  --text-main: #004e66;
+  --text-light: #5c747e;
   --card-bg: #FFFFFF;
-  --border-color: #E2DFD8;
+  --border-color: #b5cddb;
 }
 
 body {
@@ -77,8 +77,12 @@ body {
 }
 
 .nav-btn.active {
-  color: var(--primary-green);
+  color: var(--primary-dark);
   font-weight: bold;
+}
+
+.sidebar-profile {
+  display: none;
 }
 
 /* 電腦版樣式 (Tablet & Desktop) */
@@ -111,16 +115,46 @@ body {
   .desktop-logout {
     display: block !important;
   }
+  .sidebar-profile {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 0 20px 20px 20px;
+    margin-bottom: 20px;
+    border-bottom: 1px solid var(--border-color);
+  }
+  .sidebar-profile img {
+    width: 110px;
+    height: 110px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 4px solid white;
+    box-shadow: 0 4px 12px rgba(0, 78, 102, 0.1);
+    margin-bottom: 12px;
+  }
+  .sidebar-profile h3 {
+    margin: 0 0 5px 0;
+    color: var(--primary-dark);
+    font-size: 1.4rem;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .sidebar-profile p {
+    margin: 0;
+    color: var(--text-light);
+    font-size: 0.9rem;
+  }
 }
 
 /* 卡片與表單元素 */
 .card {
   background-color: var(--card-bg);
-  border-radius: 12px;
+  border-radius: 16px;
   padding: 20px;
-  margin-bottom: 15px;
+  margin-bottom: 20px;
   border: 1px solid var(--border-color);
-  box-shadow: 0 4px 6px rgba(0,0,0,0.02);
+  box-shadow: 0 8px 16px rgba(0, 78, 102, 0.06);
 }
 
 .flex-between {
@@ -138,22 +172,26 @@ body {
 
 .input-group label {
   font-weight: bold;
-  color: var(--primary-green);
+  color: var(--primary-dark);
   font-size: 0.95rem;
 }
 
-input, select {
-  padding: 12px;
-  border-radius: 8px;
+input, select, textarea {
+  padding: 12px 16px;
+  border-radius: 10px;
   border: 1px solid #CCC;
   font-family: inherit;
   background-color: #FAFAFA;
   color: var(--text-main);
 }
 
-input:focus, select:focus {
+input:focus, select:focus, textarea:focus {
   outline: none;
   border-color: var(--primary-yellow);
+}
+
+textarea {
+  resize: vertical;
 }
 
 .btn-group {
@@ -166,8 +204,8 @@ input:focus, select:focus {
   background-color: var(--primary-yellow);
   color: white;
   border: none;
-  padding: 12px;
-  border-radius: 8px;
+  padding: 12px 20px;
+  border-radius: 10px;
   font-size: 1rem;
   font-weight: bold;
   cursor: pointer;
@@ -184,8 +222,8 @@ input:focus, select:focus {
 
 .btn-secondary {
   background-color: transparent;
-  border: 1px solid var(--primary-green);
-  color: var(--primary-green);
+  border: 1px solid var(--primary-dark);
+  color: var(--primary-dark);
   padding: 8px 16px;
   border-radius: 20px;
   cursor: pointer;
@@ -193,7 +231,7 @@ input:focus, select:focus {
 }
 
 .btn-secondary.active {
-  background-color: var(--primary-green);
+  background-color: var(--primary-dark);
   color: white;
 }
 
@@ -271,7 +309,7 @@ h3 {
 
 .calendar-header-cell {
   font-weight: bold;
-  color: var(--primary-green);
+  color: var(--primary-dark);
   padding: 10px 0;
 }
 
@@ -291,8 +329,8 @@ h3 {
 
 .calendar-cell.today > span {
   font-weight: bold;
-  background-color: var(--primary-yellow);
-  color: white;
+  background-color: var(--primary-orange);
+  color: #FFF;
   border-radius: 50%;
   width: 24px;
   height: 24px;
@@ -300,7 +338,7 @@ h3 {
 }
 
 .calendar-cell.today {
-  background-color: #FFE4E1; /* 淡粉紅色 */
+  background-color: var(--primary-yellow);
 }
 
 .calendar-cell.has-event {
@@ -313,13 +351,13 @@ h3 {
 }
 
 .calendar-cell.past {
-  background-color: #F5F5F5; /* 灰色 */
-  color: #A0A0A0;
+  background-color: #c8d9e6;
+  color: #7a91a1;
   cursor: default;
 }
 
 .calendar-cell.future {
-  background-color: #FFF3E0; /* 淺橘色 */
+  background-color: #eef5f9;
 }
 
 .event-pill {
@@ -327,7 +365,7 @@ h3 {
   font-size: 0.75rem;
   padding: 2px 4px;
   border-radius: 4px;
-  background-color: var(--primary-green);
+  background-color: var(--primary-dark);
   color: white;
   width: 90%;
   overflow: hidden;
@@ -337,7 +375,7 @@ h3 {
 }
 
 .tag {
-  background-color: var(--primary-green);
+  background-color: var(--primary-dark);
   color: white;
   padding: 4px 8px;
   border-radius: 12px;
@@ -437,7 +475,7 @@ h3 {
 }
 
 .react-datepicker__navigation-icon::before {
-  border-color: var(--primary-green);
+  border-color: var(--primary-dark);
   border-width: 2px 2px 0 0;
 }
 
@@ -446,7 +484,7 @@ h3 {
 }
 
 .react-datepicker__day-name {
-  color: var(--primary-green);
+  color: var(--primary-dark);
   font-weight: 500;
 }
 
@@ -479,7 +517,7 @@ h3 {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #E4E0D3 0%, #C9C5B8 100%); /* 文青感雙色漸層 */
+  background: linear-gradient(135deg, #e1eef6 0%, #b5cddb 100%);
   padding: 20px;
   box-sizing: border-box;
   z-index: 9999;
@@ -501,7 +539,7 @@ h3 {
   margin-bottom: 10px;
 }
 .auth-toggle {
-  color: var(--primary-green);
+  color: var(--primary-dark);
   cursor: pointer;
   margin-top: 15px;
   font-size: 0.9rem;
