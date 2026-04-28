@@ -724,11 +724,11 @@ const DietTab = () => {
   // 取得不同類別的專屬配色
   const getCategoryStyle = (category) => {
     switch(category) {
-      case '飼料': return { bg: 'rgba(252, 190, 50, 0.12)', tag: '#fcbe32' };
-      case '用藥': return { bg: 'rgba(255, 95, 46, 0.12)', tag: '#ff5f2e' };
-      case '保健品': return { bg: 'rgba(86, 168, 203, 0.12)', tag: '#56A8CB' };
-      case '驅蟲藥': return { bg: 'rgba(165, 147, 224, 0.12)', tag: '#A593E0' };
-      default: return { bg: 'var(--card-bg)', tag: 'var(--primary-dark)' };
+      case '飼料': return { border: '#fcbe32', tag: '#fcbe32' };
+      case '用藥': return { border: '#ff5f2e', tag: '#ff5f2e' };
+      case '保健品': return { border: '#56A8CB', tag: '#56A8CB' };
+      case '驅蟲藥': return { border: '#A593E0', tag: '#A593E0' };
+      default: return { border: 'var(--border-color)', tag: 'var(--primary-dark)' };
     }
   };
 
@@ -756,9 +756,10 @@ const DietTab = () => {
       </div>
 
       {sortedLogs.map(log => {
-        const { bg, tag } = getCategoryStyle(log.category || '飼料');
+        const { border, tag } = getCategoryStyle(log.category || '飼料');
+        const isDefault = border === 'var(--border-color)';
         return (
-        <div className="card" key={log.id} style={{ backgroundColor: bg }}>
+        <div className="card" key={log.id} style={{ backgroundColor: 'var(--card-bg)', borderColor: border, borderWidth: isDefault ? '1px' : '2px' }}>
           <div className="flex-between">
             <h4 style={{margin: '0 0 10px 0', color: 'var(--primary-dark)'}}>
               <span className="tag" style={{ backgroundColor: tag }}>{log.category || '飼料'}</span>{log.brand}
